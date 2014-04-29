@@ -1,0 +1,17 @@
+<tools>
+    <tool id="sync-history" title="DBMaster::Synchronization History">
+        <description>Allows viewing sync sessions</description>
+        <output  script="sync-history.groovy" type="html" />
+    </tool>
+
+    <tool id="sync-history-details" title="Sync Session {p_title}" visible="false" parent-tool="sync-history">
+        <description>Shows details of sync session</description>
+
+        <parameters>
+            <parameter name="p_session_id"   title="Session id"      type="INTEGER" required="true" visible="false" />
+            <parameter name="p_title"        title="Session title"   type="STRING"  required="true" visible="false" />
+        </parameters>
+
+        <output  script="sync-history-details.groovy" type="html" />
+    </tool>
+</tools>
