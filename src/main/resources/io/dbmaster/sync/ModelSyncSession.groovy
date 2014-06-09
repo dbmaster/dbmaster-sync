@@ -1,6 +1,3 @@
-/*
- *  File Version:  $Id: ModelSyncSession.groovy 119 2013-04-25 16:49:28Z schristin $
- */
 package io.dbmaster.sync;
 
 import java.util.ArrayList

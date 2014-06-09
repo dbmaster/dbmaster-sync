@@ -1,7 +1,3 @@
-/*
- *  File Version:  $Id: PreviewGenerator.groovy 145 2013-05-22 18:10:44Z schristin $
- */
-
 package io.dbmaster.sync;
 
 import com.branegy.dbmaster.sync.api.*;
