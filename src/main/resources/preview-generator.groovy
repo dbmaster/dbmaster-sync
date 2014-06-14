@@ -116,7 +116,7 @@ class PreviewGenerator{
     def syncPairSorter = new PreviewComparator();
         
     private Integer inc(Integer i){
-        return i == null? i : Integer.valueOf(i.intValue()+1);
+        return Integer.valueOf(i.intValue()+1);
     }
     
     private void dumpItem(int level, SyncPair pair) {
@@ -146,7 +146,7 @@ class PreviewGenerator{
             sb.append(""""> ${pair.getChangeType()}<br/>${pair.getObjectType()}<br/><b>${pair.getPairName()}</b>""")
             if (pair.isOrderChanged()){
                 sb.append("""<br/>Move&nbsp;from&nbsp;index&nbsp;${inc(pair.getSourceIndex())}&nbsp;to&nbsp;${inc(pair.getTargetIndex())}""");
-            } else if (pair.getTargetIndex()){
+            } else if (pair.getTargetIndex()!=null){
                 sb.append("""<br/>Insert&nbsp;at&nbsp;index&nbsp;${inc(pair.getTargetIndex())}""");
             } else if (pair.isOrderedDelete()){
                 sb.append("""<br/>Delete&nbsp;at&nbsp;index&nbsp;${inc(pair.getSourceIndex())}""");
