@@ -31,7 +31,6 @@
                         <Tags>sync</Tags>
                         <Author>slava.christin</Author>
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
-                        <Export-Package>io.dbmaster.sync;version="${project.version}"</Export-Package>
                         <Import-Package>io.dbmaster.api;version="1.7.0"</Import-Package>
                     </instructions>
                 </configuration>

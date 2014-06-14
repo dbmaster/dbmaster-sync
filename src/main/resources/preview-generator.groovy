@@ -11,7 +11,9 @@ import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
 
 def static generateSyncSessionPreviewHtml(syncSession, showChangesOnly){
     String htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
-    syncSession.setParameter("html", htmlPreview.toString()); // TODO subject to change
+    if (!showChangesOnly){ // save for diff only
+        syncSession.setParameter("html", htmlPreview); // TODO subject to change
+    }
     return htmlPreview;
 }
 
