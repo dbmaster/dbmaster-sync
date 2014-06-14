@@ -9,15 +9,7 @@ import java.util.Collections;
 import com.branegy.dbmaster.sync.api.*;
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
 
-def static generateSyncSessionPreviewHtml(syncSession, showChangesOnly){
-    String htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
-    if (!showChangesOnly){ // save for diff only
-        syncSession.setParameter("html", htmlPreview); // TODO subject to change
-    }
-    return htmlPreview;
-}
-
-private class PreviewGenerator{
+class PreviewGenerator{
     def colors = [
         "EQUALS"   : "",
         "NEW"      : "rgb(109, 241, 6)" ,
@@ -221,4 +213,9 @@ private class PreviewGenerator{
             sb.append("</tr>")
         }
     }
+}
+
+htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
+if (!showChangesOnly){ // save for diff only
+    syncSession.setParameter("html", htmlPreview); // TODO subject to change
 }
