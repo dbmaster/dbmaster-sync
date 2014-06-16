@@ -10,7 +10,7 @@
     <name>DBMaster Sync</name>
     <description>Synchronization framework for DBMaster. Helps to import external data</description>
 
-    <version>1.0.6</version>
+    <version>1.0.7</version>
     <packaging>bundle</packaging>
 
     <parent>
