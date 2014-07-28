@@ -1,7 +1,3 @@
-/* 
- *  File Version:  $Id: database-importer.groovy 2249 2013-10-28 04:33:20Z schristin $
- */
-
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;

@@ -1,7 +1,3 @@
-/* 
- *  File Version:  $Id: database-importer-preview.groovy 2512 2014-05-26 19:41:29Z keygen88 $
- */
-
 import java.util.Comparator;
 import java.util.Arrays;
 import java.util.Collections;
