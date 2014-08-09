@@ -21,6 +21,9 @@ import com.branegy.dbmaster.model.*
 class ModelNamer implements Namer {
     @Override
     public String getName(Object o) {
+        // if (o instanceof ModelObject<?>) {
+        //    return ((ModelObject<?>)o).getSimpleName();
+        // } else 
         if (o instanceof DatabaseObject<?>) {
             return ((DatabaseObject<?>)o).getName();
         } else {
@@ -49,6 +52,14 @@ class ModelNamer implements Namer {
 class ModelComparer extends BeanComparer {
     Model    source
     Model    target
+    
+    private cleanDefault (String value) {
+        if (value==null || value.length()<2 || !(value.startsWith("(")  && value.endsWith(")"))) {
+            return value
+        } else {
+            return cleanDefault(value[1..value.length()-2])
+        }
+    }
     
     @Override
     public void syncPair(SyncPair pair, SyncSession session) {
@@ -114,14 +125,16 @@ class ModelComparer extends BeanComparer {
         } else if (objectType.equals("Column")) {
             Column sourceColumn = (Column)pair.getSource();
             Column targetColumn = (Column)pair.getTarget();
-            
+
             def attributes = pair.getAttributes()
             attributes.add(new SyncAttributePair("Type", sourceColumn?.getPrettyType(),
                                                          targetColumn?.getPrettyType()))
             attributes.add(new SyncAttributePair("Nullable", sourceColumn?.isNullable(),
                                                              targetColumn?.isNullable()))
-            attributes.add(new SyncAttributePair("Default Value", sourceColumn?.getDefaultValue(),
-                                                                  targetColumn?.getDefaultValue()))
+
+            attributes.add(new SyncAttributePair("Default Value", cleanDefault(sourceColumn?.getDefaultValue()),
+                                                                  cleanDefault(targetColumn?.getDefaultValue())))
+            
             attributes.add(new SyncAttributePair("Extra", sourceColumn?.getExtraDefinition(),
                                                           targetColumn?.getExtraDefinition()))
                                                          
@@ -155,6 +168,7 @@ targetParameter?.getDefaultValue()))
                 }
                 return result
             }
+
             attributes.add(new SyncAttributePair("Columns",
                                                  columnsAsText(sourceIndex?.getColumns(),false),
                                                  columnsAsText(targetIndex?.getColumns(),false)))
