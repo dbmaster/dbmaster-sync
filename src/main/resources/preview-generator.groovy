@@ -27,7 +27,7 @@ class PreviewGenerator{
         String longTextString = session.getParameter("longText");
         longText = longTextString == null ? Collections.emptySet()
             : Arrays.asList(longTextString.split(";")) as Set;
-        dumpItem(0, session.getSyncResult());
+        dumpItem(0, session.getSyncResult(), 0);
         return sb.toString();
     }
     
@@ -35,7 +35,7 @@ class PreviewGenerator{
         return o==null ? "" : o.getClass().getName()
     }
     
-    static class PreviewComparator implements Comparator<SyncPair>{
+    static class PreviewComparatorByTarget implements Comparator<SyncPair>{
         @Override
         public int compare(SyncPair a, SyncPair b) {
             int result = a.getObjectType().compareTo(b.getObjectType())
@@ -45,15 +45,9 @@ class PreviewGenerator{
                 result = type1-type2;
                 if (result == 0){
                     if (type1 == 0){ // index collection
-                        Integer i1 = a.getSourceIndex() != null ? a.getSourceIndex(): a.getTargetIndex();
-                        Integer i2 = b.getSourceIndex() != null ? b.getSourceIndex(): b.getTargetIndex();
-                        result = compareTo(i1,i2);
-                        if (result==0) {
-                            if (a.getSourceIndex()!=null){
-                                result = getSyncPairAsDeleteType(a)-getSyncPairAsDeleteType(b)
-                            } else {
-                                result = a.getPairName().compareTo(b.getPairName())
-                            }
+                        result = compareTo(a.getTargetIndex(),b.getTargetIndex());
+                        if (result == 0 && a.getTargetIndex() == null){
+                            result = compareTo(a.getSourceIndex(),b.getSourceIndex());
                         }
                     } else { // order by change type
                         type1 = getSyncPairByOperationType(a);
@@ -72,30 +66,22 @@ class PreviewGenerator{
             if (o1 == null && o2 == null){
                 return  0;
             } else if (o1 == null){
-                return -1;
+                return +1; // null - last
             } else if (o2 == null){
-                return +1;
+                return -1; // null - last
             } else {
                 return o1.compareTo(o2);
             }
         }
         
         private int getSyncPairAsType(SyncPair pair){
-            if (pair.getSourceIndex()!=null || pair.getTargetIndex()!=null){
+            if (pair.isOrdered()){
                return 0;
             } else {
                return 1;
             }
         }
-        
-        private int getSyncPairAsDeleteType(SyncPair pair){
-            if (pair.isOrderedDelete()){
-               return 0;
-            } else {
-               return 1;
-            }
-        }
-        
+
         private int getSyncPairByOperationType(SyncPair pair){
             switch (pair.getChangeType()){
                 case ChangeType.DELETED: return 0;
@@ -109,27 +95,34 @@ class PreviewGenerator{
         }
     }
     
-    def syncPairSorter = new PreviewComparator();
+    def syncPairSorter = new PreviewComparatorByTarget();
         
     private Integer inc(Integer i){
         return Integer.valueOf(i.intValue()+1);
     }
     
-    private void dumpItem(int level, SyncPair pair) {
+    private void dumpItem(int level, SyncPair pair, int indexShift) {
+        def childItems = pair.getChildren().sort(syncPairSorter)
         if (level==0) {
-            def childItems = pair.getChildren().sort(syncPairSorter)
             sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
+            String type = null;
             for (SyncPair child: childItems) {
-               if (showChangesOnly && child.getChangeType()==SyncPair.ChangeType.EQUALS 
-                   && !child.isOrderChanged()) {
-                   continue
-               }
-               dumpItem(level+1, child);
+                if (!child.getObjectType().equals(type)){
+                    type = child.getObjectType();
+                    indexShift = 0;
+                }
+                if (!child.isSelected() && child.isOrdered()){
+                    indexShift++;
+                }
+                if (!child.isSelected() || (showChangesOnly 
+                        && child.getChangeType()==SyncPair.ChangeType.EQUALS && !child.isOrdered())) {
+                    continue;
+                }
+                dumpItem(level+1, child, indexShift);
             }
             sb.append("</table>")
         } else {
             def rowSpanNumber = 0 
-            def childItems = pair.getChildren().sort(syncPairSorter)
             if ((!showChangesOnly && childItems.size()>0)
                 ||(showChangesOnly && childItems.find {it.getChangeType()!=SyncPair.ChangeType.EQUALS}!=null)) {
                 rowSpanNumber++;
@@ -140,20 +133,32 @@ class PreviewGenerator{
 
             int rowSpanPosition = sb.size()
             sb.append(""""> ${pair.getChangeType()}<br/>${pair.getObjectType()}<br/><b>${pair.getPairName()}</b>""")
-            if (pair.isOrderChanged()){
-                sb.append("""<br/>Move&nbsp;from&nbsp;index&nbsp;${inc(pair.getSourceIndex())}&nbsp;to&nbsp;${inc(pair.getTargetIndex())}""");
-            } else if (pair.getTargetIndex()!=null){
-                sb.append("""<br/>Insert&nbsp;at&nbsp;index&nbsp;${inc(pair.getTargetIndex())}""");
-            } else if (pair.isOrderedDelete()){
-                sb.append("""<br/>Delete&nbsp;at&nbsp;index&nbsp;${inc(pair.getSourceIndex())}""");
+            if (pair.isOrdered()){
+                if (pair.isOrderChanged()){
+                    sb.append("""<br/>Move&nbsp;from&nbsp;index&nbsp;${inc(pair.getSourceIndex())}&nbsp;to&nbsp;${inc(pair.getTargetIndex())-indexShift}""");
+                } else if (pair.getSourceIndex()==null){
+                    sb.append("""<br/>Insert&nbsp;at&nbsp;index&nbsp;${inc(pair.getTargetIndex())-indexShift}""");
+                } else if (pair.getTargetIndex()==null){
+                    sb.append("""<br/>Delete&nbsp;at&nbsp;index&nbsp;${inc(pair.getSourceIndex())}""");
+                } else {
+                    sb.append("""<br/>Unchanged&nbsp;index&nbsp;${inc(pair.getTargetIndex())-indexShift}""");
+                }
             }
             
             sb.append("""</td>""")
             boolean noOutput = true
             if (childItems.size()>0) {
+                String type = null;
                 for (SyncPair child: childItems) {
-                    if (showChangesOnly && child.getChangeType()==SyncPair.ChangeType.EQUALS &&
-                            !child.isOrderChanged()) {
+                    if (!child.getObjectType().equals(type)){
+                        type = child.getObjectType();
+                        indexShift = 0;
+                    }
+                    if (!child.isSelected() && child.isOrdered()){
+                        indexShift++;
+                    }
+                    if (!child.isSelected() || (showChangesOnly 
+                            && child.getChangeType()==SyncPair.ChangeType.EQUALS && !child.isOrdered())) {
                         continue
                     } else {
                         rowSpanNumber = 1
@@ -163,7 +168,7 @@ class PreviewGenerator{
                         sb.append("""<td colspan="3"><table style="width:100%;border:0" cellspacing="0" class="simple-table">""")
                         noOutput = false
                     }
-                    dumpItem(level+1, child);
+                    dumpItem(level+1, child, indexShift);
                 }
                 if (!noOutput) {
                     sb.append("</table></td>")
@@ -177,7 +182,8 @@ class PreviewGenerator{
                 return c
             }
             for (SyncAttributePair attr: attributes ) {
-                if (showChangesOnly && attr.getChangeType()==SyncAttributePair.AttributeChangeType.EQUALS) {
+                if (!attr.isSelected() || (showChangesOnly 
+                            && attr.getChangeType()==SyncAttributePair.AttributeChangeType.EQUALS)) {
                     continue
                 } else {
                    rowSpanNumber++ 
