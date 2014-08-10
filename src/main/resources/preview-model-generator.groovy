@@ -161,8 +161,13 @@ class PreviewGenerator {
                     if (column.getCustomData("is_computed") == 1) {
                         "AS "+column.getCustomData("computedExpression")
                         // TODO add is_persisted
-                    } else {
+                    } else {                                                            
+                        def identity = column.getCustomData("is_identity")
+                        if (identity!=null) 
+                            System.out.println("Identity=${identity} ${identity.class.name}")
+
                         column.prettyType.toUpperCase() + 
+                        ((identity != null && identity == 1) ? " IDENTITY" : "") +
                         (column.nullable ? " NULL" : " NOT NULL") +
                         // TODO Add quotes
                         (column.defaultValue  ? " DEFAULT "+cleanDefault(column.defaultValue) : "")

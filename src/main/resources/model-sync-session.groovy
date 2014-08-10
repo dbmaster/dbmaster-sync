@@ -137,7 +137,12 @@ class ModelComparer extends BeanComparer {
             
             attributes.add(new SyncAttributePair("Extra", sourceColumn?.getExtraDefinition(),
                                                           targetColumn?.getExtraDefinition()))
-                                                         
+            
+            // TODO check if null & null
+            def sourceAttr = sourceColumn?.getCustomData("is_identity")
+            def targetAttr = targetColumn?.getCustomData("is_identity")
+            if (sourceAttr!=null && targetAttr!=null) 
+            attributes.add(new SyncAttributePair("Identity", sourceAttr, targetAttr))
         } else if (objectType.equals("Parameter")) {
             Parameter sourceParameter = (Parameter)pair.getSource();
             Parameter targetParameter = (Parameter)pair.getTarget();
