@@ -21,9 +21,6 @@ import com.branegy.dbmaster.model.*
 class ModelNamer implements Namer {
     @Override
     public String getName(Object o) {
-        // if (o instanceof ModelObject<?>) {
-        //    return ((ModelObject<?>)o).getSimpleName();
-        // } else 
         if (o instanceof DatabaseObject<?>) {
             return ((DatabaseObject<?>)o).getName();
         } else {
