@@ -205,7 +205,6 @@ class ModelSyncSession extends SyncSession {
     Model sourceModel
     // modelService used in applyChanges
     ModelService modelService
-    int shiftCount;
 
     public ModelSyncSession(DbMaster dbm) {
         super(new ModelComparer())
@@ -232,8 +231,6 @@ class ModelSyncSession extends SyncSession {
         if (objectType ==~ /Model/) {
             pair.getChildren().each { importChanges(it, sourceModel) }
         } else if (objectType.equals("Table")) {
-            getComparer().preconditionSort(pair);
-        
             Table   sourceTable = (Table)pair.getSource();
             Table   targetTable = (Table)pair.getTarget();
             
@@ -253,13 +250,12 @@ class ModelSyncSession extends SyncSession {
                     //    }
                     //}
                     //inventorySrv.updateDatabase(sourceDB);
-                    shiftCount = sourceTable.getColumns().size();
                     pair.getChildren().each { importChanges(it, sourceTable) }
-                    //?? modelService.saveModelObject(sourceTable) 
+                    modelService.saveModelObject(sourceTable) 
                     break;
                 case ChangeType.DELETED:
                     parentObject.removeTable(sourceTable)
-                    //?? modelService.deleteModelObject(sourceTable.getId())
+                    modelService.deleteModelObject(sourceTable.getId())
                     break;
                 case ChangeType.COPIED:
                     throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
@@ -269,8 +265,6 @@ class ModelSyncSession extends SyncSession {
                     throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
             }
         } else if (objectType.equals("View")) {
-                getComparer().preconditionSort(pair);
-        
                 View   sourceView = (View)pair.getSource();
                 View   targetView = (View)pair.getTarget();
                 
@@ -285,13 +279,12 @@ class ModelSyncSession extends SyncSession {
                         break;
                     case ChangeType.CHANGED:
                         sourceView.setSource( targetView.getSource() )
-                        shiftCount = sourceView.getColumns().size();
                         pair.getChildren().each { importChanges(it, sourceView) }
-                        //?? modelService.saveModelObject(sourceView)
+                        modelService.saveModelObject(sourceView)
                         break;
                     case ChangeType.DELETED:
                         parentObject.removeView(sourceView)
-                        //?? modelService.deleteModelObject(sourceView.getId())
+                        modelService.deleteModelObject(sourceView.getId())
                         break;
                     case ChangeType.COPIED:
                         throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
@@ -301,8 +294,6 @@ class ModelSyncSession extends SyncSession {
                         throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
                 }          
         } else if (objectType.equals("Procedure")) {
-                getComparer().preconditionSort(pair);
-
                 Procedure   sourceProcedure = (Procedure)pair.getSource();
                 Procedure   targetProcedure = (Procedure)pair.getTarget();
                 switch (pair.getChangeType()) {
@@ -317,13 +308,12 @@ class ModelSyncSession extends SyncSession {
                         break;
                     case ChangeType.CHANGED:
                         sourceProcedure.setSource( targetProcedure.getSource() )
-                        shiftCount = sourceProcedure.getParameters().size();
                         pair.getChildren().each { importChanges(it, sourceProcedure) }
-                        //?? modelService.saveModelObject(sourceProcedure)
+                        modelService.saveModelObject(sourceProcedure)
                         break;
                     case ChangeType.DELETED:
                         parentObject.removeProcedure(sourceProcedure)
-                        //?? modelService.deleteModelObject(sourceProcedure.getId())
+                        modelService.deleteModelObject(sourceProcedure.getId())
                         break;
                     case ChangeType.COPIED:
                         throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
@@ -333,8 +323,6 @@ class ModelSyncSession extends SyncSession {
                         throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
                 }
         } else if (objectType.equals("Function")) {
-                getComparer().preconditionSort(pair);
-                
                 Function   sourceFunction = (Function)pair.getSource();
                 Function   targetFunction = (Function)pair.getTarget();
                 switch (pair.getChangeType()) {
@@ -351,13 +339,12 @@ class ModelSyncSession extends SyncSession {
                         sourceFunction.setSource( targetFunction.getSource() )
                         sourceFunction.setType( targetFunction.getType() )
                         sourceFunction.setExtraInfo( targetFunction.getExtraInfo() )
-                        shiftCount = sourceFunction.getParameters().size();
                         pair.getChildren().each { importChanges(it, sourceFunction) }
-                        //?? modelService.saveModelObject(sourceFunction)
+                        modelService.saveModelObject(sourceFunction)
                         break;
                     case ChangeType.DELETED:
                         parentObject.removeFunction(sourceFunction)
-                        //?? modelService.deleteModelObject(sourceFunction.getId())
+                        modelService.deleteModelObject(sourceFunction.getId())
                         break;
                     case ChangeType.COPIED:
                         throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
@@ -371,10 +358,6 @@ class ModelSyncSession extends SyncSession {
                 Column   targetColumn = (Column)pair.getTarget()
                 switch (pair.getChangeType()) {
                     case ChangeType.NEW:
-                        parentObject.addColumn(targetColumn, 
-                            pair.getTargetIndex() == null ? -1 : 
-                            pair.getTargetIndex()//+parentObject.getColumns().size()-shiftCount
-                        );
                         break;
                     case ChangeType.COPIED:
                     case ChangeType.CHANGED:
@@ -386,15 +369,9 @@ class ModelSyncSession extends SyncSession {
                         sourceColumn.setPrecesion(targetColumn.getPrecesion())
                         sourceColumn.setDefaultValue(targetColumn.getDefaultValue())
                         sourceColumn.setExtraDefinition(targetColumn.getExtraDefinition())
-                        //?? modelService.saveColumn(sourceColumn, null)
                     case ChangeType.EQUALS:
-                        if (pair.isOrderChanged()){
-                            parentObject.addColumn(sourceColumn, pair.getTargetIndex()); // swap only
-                        }
                         break;
                     case ChangeType.DELETED:
-                        parentObject.removeColumn(sourceColumn)
-                        //?? modelService.deleteColumn(sourceColumn.getId())
                         break;                    
                     default:
                         throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
@@ -404,10 +381,6 @@ class ModelSyncSession extends SyncSession {
                 Parameter targetParameter = (Parameter)pair.getTarget();
                 switch (pair.getChangeType()) {
                     case ChangeType.NEW:
-                        parentObject.addParameter(targetParameter,
-                            pair.getTargetIndex() == null ? -1 :
-                            pair.getTargetIndex()//+parentObject.getParameters().size()-shiftCount
-                        );
                         break;
                     case ChangeType.COPIED:
                     case ChangeType.CHANGED:
@@ -421,13 +394,8 @@ class ModelSyncSession extends SyncSession {
                         sourceParameter.setExtraDefinition(targetParameter.getExtraDefinition());
                         sourceParameter.setParamType(targetParameter.getParamType());
                     case ChangeType.EQUALS:
-                        if (pair.isOrderChanged()){ // swap only
-                            parentObject.addParameter(sourceParameter, pair.getTargetIndex());
-                        }
                         break;
                     case ChangeType.DELETED:
-                        parentObject.removeParameter(sourceParameter)
-                        //?? modelService.deleteParameter(sourceParameter.getId())
                         break;
                     default:
                         throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
