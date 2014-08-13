@@ -4,19 +4,28 @@ import java.util.Collections;
 
 import com.branegy.dbmaster.sync.api.*;
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
+import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType;
 
 class PreviewGenerator{
-    def colors = [
-        "EQUALS"   : "",
-        "NEW"      : "rgb(109, 241, 6)" ,
-        "CHANGED"  : "rgb(255, 255, 128)" ,
-        "COPIED"   : "rgb(255, 255, 128)",
-        "DELETED"  : "rgb(249, 154, 156)"
-    ]
+    def changePairClass = [
+        "new",
+        "changed",
+        "changed",
+        "deleted",
+        ""
+    ];
+    def changeAttrClass = [
+        "new",
+        "changed",
+        "deleted",
+        ""
+    ];
     
     private StringBuilder sb;
+    private List<SyncPair> path = new ArrayList<SyncPair>(10);
     private showChangesOnly;
     private Set<String> longText;
+    private Deque<SyncPair> queue = new ArrayDeque<SyncPair>(1000);
    
     public PreviewGenerator(boolean showChangesOnly) {
         this.showChangesOnly = showChangesOnly;
@@ -27,8 +36,213 @@ class PreviewGenerator{
         String longTextString = session.getParameter("longText");
         longText = longTextString == null ? Collections.emptySet()
             : Arrays.asList(longTextString.split(";")) as Set;
-        dumpItem(0, session.getSyncResult(), 0);
+            
+        sb.append("""<script type="text/javascript">""");
+        sb.append("""
+                     var f = function(event){
+                         event = event || window.event;
+                         var target = event.target || event.srcElement;
+                         if (target.tagName == "A"){
+                             window.location.hash = target.href.substring(target.href.lastIndexOf('#'));
+                         }
+                         event.preventDefault ? event.preventDefault() : (event.returnValue=false);
+                         return false;
+                     }
+                     if(window.addEventListener){
+                         window.addEventListener("click",f,false);
+                     } else {
+                         window.attachEvent("onclick",f);
+                     }
+        """);
+        sb.append("</script>");
+        
+        SyncPair pair = session.getSyncResult();
+        queue.addLast(pair);
+        while (!queue.isEmpty()){
+            SyncPair p = queue.removeFirst();
+            printScreen(p);
+            if (p.hasChildren()){
+                p.getChildren().sort(syncPairSorter);
+                for (SyncPair p2:p.getChildren()){
+                   if (p2.hasChildrenChanges() || p2.hasAttributeChanges()){
+                       queue.addLast(p2);
+                   } 
+                }
+            }
+        }
         return sb.toString();
+    }
+    
+    private void printLink(Object hash, Object name){
+        sb.append("<a href=\"#");
+        sb.append(hash);
+        sb.append("""" target="_self">""");
+        sb.append(name);
+        sb.append("</a>");
+    }
+    
+    private void printBreadcrumb(SyncPair pair){
+        while (pair!=null){
+            path.add(pair);
+            pair = pair.getParentPair();
+        }
+        for (int i=path.size()-1; i>0;--i){
+            pair = path.get(i);
+            sb.append(pair.getObjectType()+": ");
+            printLink(pair.getId(),
+                (pair.getTargetName()!=null?pair.getTargetName():pair.getSourceName())
+            );
+            sb.append(" &gt; ");
+        }
+        pair = path.get(0);
+        sb.append(pair.getObjectType());
+        sb.append(": ");
+        sb.append("<b>");
+        sb.append(pair.getTargetName()!=null?pair.getTargetName():pair.getSourceName());
+        sb.append("</b>");
+        path.clear();
+    }
+    
+    private void printScreen(SyncPair pair){
+        sb.append("<a name=\"");
+        sb.append(pair.getId());
+        sb.append("\">");
+        sb.append("</a>");
+        sb.append("""<div class="item """);
+        sb.append("border-"+changePairClass.get(pair.getChangeType().ordinal()));
+        sb.append("\">");
+            sb.append("""<div class="header">""");
+            printBreadcrumb(pair);
+            sb.append("</div>");
+            if (pair.hasChildrenChanges()){
+                sb.append("""<table cellspacing=\"0\" class="simple-table child">""");
+                    sb.append("<tr>");
+                        sb.append("<th>Type</th>");
+                        sb.append("<th>Status</th>");
+                        sb.append("<th>Source</th>");
+                        sb.append("<th>Index</th>");
+                        sb.append("<th>Target</th>");
+                    sb.append("</tr>");
+                    for (SyncPair child: pair.getChildren()){
+                        if (!showChangesOnly || child.isOrdered()
+                                || child.getChangeType()!=ChangeType.EQUALS){
+                            sb.append("<tr class=\"");
+                            sb.append(changePairClass.get(child.getChangeType().ordinal()));
+                            sb.append("\">");
+                                sb.append("<td>");
+                                    sb.append(child.getObjectType());
+                                sb.append("</td>");
+                                sb.append("<td>");
+                                    sb.append(""+child.getChangeType());
+                                sb.append("</td>");
+                                sb.append("<td>");
+                                    if (child.getSourceName()!=null){
+                                        if (child.hasChildrenChanges() || child.hasAttributeChanges()){
+                                            printLink(child.getId(),child.getSourceName());
+                                        } else {
+                                            sb.append(child.getSourceName());
+                                        }
+                                    }
+                                sb.append("</td>");
+                                if (child.isOrderChanged()){
+                                    sb.append("<td class=\"changed\">");
+                                } else {
+                                    sb.append("<td>");
+                                }
+                                    if (child.isOrdered()){
+                                        if (child.getSourceIndex()!=null){
+                                            sb.append("<div class=\"i-s\">");
+                                            sb.append(child.getSourceIndex()+1);
+                                            sb.append("</div>");
+                                            
+                                            if (child.getTargetIndex()!=null){
+                                                sb.append("<div class=\"i-a\">&rarr;</div>");
+                                                sb.append("<div class=\"i-t\">");
+                                                sb.append(child.getTargetIndex()+1);
+                                                sb.append("</div>");
+                                            }
+                                        } else {
+                                            sb.append("<div class=\"i-t\" style=\"float:right;\">");
+                                            sb.append(child.getTargetIndex()+1);
+                                            sb.append("</div>");
+                                        }
+                                    }
+                                sb.append("</td>");
+                                sb.append("<td>");
+                                    if (child.getTargetName()!=null){
+                                        if (child.hasChildrenChanges() || child.hasAttributeChanges()){
+                                            printLink(child.getId(),child.getTargetName());
+                                        } else {
+                                            sb.append(child.getTargetName());
+                                        }
+                                    }
+                                sb.append("</td>");
+                            sb.append("<tr>");
+                        }
+                    }
+                sb.append("</table>");
+            }
+            if (pair.hasAttributeChanges()){
+                sb.append("""<div class="attr-header">Attrubute changes</div>""");
+                sb.append("""<table cellspacing=\"0\" class="simple-table attr">""");
+                sb.append("<tr>");
+                    sb.append("<th>Status</th>");
+                    sb.append("<th>Name</th>");
+                    sb.append("<th>Source</th>");
+                    sb.append("<th>Target</th>");
+                sb.append("</tr>");
+                pair.getAttributes().sort { a,b ->
+                    def c = a.getChangeType().compareTo(b.getChangeType())
+                    if (c==0) {
+                        c = a.attributeName.compareTo(b.attributeName)
+                    }
+                    return c
+                }
+                for (SyncAttributePair child: pair.getAttributes()){
+                    if (!showChangesOnly || child.getChangeType()!=AttributeChangeType.EQUALS){
+                        boolean pre = longText.contains(pair.getObjectType()+"."+child.getAttributeName());
+                        
+                        sb.append("<tr class=\"");
+                        sb.append(changeAttrClass.get(child.getChangeType().ordinal()));
+                         sb.append("\">");
+                            sb.append("<td>");
+                                 sb.append(child.getAttributeName());
+                            sb.append("</td>");
+                            sb.append("<td>");
+                                sb.append(""+child.getChangeType());
+                            sb.append("</td>");
+                            sb.append("<td>");
+                                if (child.getSourceValue()!=null){
+                                    if (pre){
+                                        sb.append("<pre>");
+                                        sb.append(child.getSourceValue());
+                                        sb.append("</pre>");
+                                    } else {
+                                        sb.append(child.getSourceValue());
+                                    }
+                                } else {
+                                    sb.append("-not defined-");
+                                }
+                            sb.append("</td>");
+                            sb.append("<td>");
+                                if (child.getTargetValue()!=null){
+                                    if (pre){
+                                        sb.append("<pre>");
+                                        sb.append(child.getTargetValue());
+                                        sb.append("</pre>");
+                                    } else {
+                                        sb.append(child.getTargetValue());
+                                    }
+                                } else {
+                                    sb.append("-not defined-");
+                                }
+                            sb.append("</td>");
+                        sb.append("<tr>");
+                    }
+                }
+                sb.append("</table>");
+            }
+        sb.append("</div>");
     }
     
     public String getType(Object o) {
@@ -86,9 +300,9 @@ class PreviewGenerator{
             switch (pair.getChangeType()){
                 case ChangeType.DELETED: return 0;
                 case ChangeType.CHANGED: return 1;
-                case ChangeType.COPIED:  return 1;
-                case ChangeType.EQUALS:  return 2;
-                case ChangeType.NEW:     return 3;
+                case ChangeType.COPIED:  return 2;
+                case ChangeType.EQUALS:  return 3;
+                case ChangeType.NEW:     return 4;
                 default:
                     throw new RuntimeException();
             }
@@ -96,125 +310,6 @@ class PreviewGenerator{
     }
     
     def syncPairSorter = new PreviewComparatorByTarget();
-        
-    private Integer inc(Integer i){
-        return Integer.valueOf(i.intValue()+1);
-    }
-    
-    private void dumpItem(int level, SyncPair pair, int indexShift) {
-        def childItems = pair.getChildren().sort(syncPairSorter)
-        if (level==0) {
-            sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
-            String type = null;
-            for (SyncPair child: childItems) {
-                if (!child.getObjectType().equals(type)){
-                    type = child.getObjectType();
-                    indexShift = 0;
-                }
-                if (!child.isSelected() && child.isOrdered()){
-                    indexShift++;
-                }
-                if (!child.isSelected() || (showChangesOnly 
-                        && child.getChangeType()==SyncPair.ChangeType.EQUALS && !child.isOrdered())) {
-                    continue;
-                }
-                dumpItem(level+1, child, indexShift);
-            }
-            sb.append("</table>")
-        } else {
-            def rowSpanNumber = 0 
-            if ((!showChangesOnly && childItems.size()>0)
-                ||(showChangesOnly && childItems.find {it.getChangeType()!=SyncPair.ChangeType.EQUALS}!=null)) {
-                rowSpanNumber++;
-                sb.append("<!-- +1 child items changes only ${showChangesOnly}-->");
-            }
-            sb.append("""<tr>
-                         <td style="vertical-align:top;width:20%;background-color:${colors[pair.getChangeType().toString()]}" rowspan=" """)
-
-            int rowSpanPosition = sb.size()
-            sb.append(""""> ${pair.getChangeType()}<br/>${pair.getObjectType()}<br/><b>${pair.getPairName()}</b>""")
-            if (pair.isOrdered()){
-                if (pair.isOrderChanged()){
-                    sb.append("""<br/>Move&nbsp;from&nbsp;index&nbsp;${inc(pair.getSourceIndex())}&nbsp;to&nbsp;${inc(pair.getTargetIndex())-indexShift}""");
-                } else if (pair.getSourceIndex()==null){
-                    sb.append("""<br/>Insert&nbsp;at&nbsp;index&nbsp;${inc(pair.getTargetIndex())-indexShift}""");
-                } else if (pair.getTargetIndex()==null){
-                    sb.append("""<br/>Delete&nbsp;at&nbsp;index&nbsp;${inc(pair.getSourceIndex())}""");
-                } else {
-                    sb.append("""<br/>Unchanged&nbsp;index&nbsp;${inc(pair.getTargetIndex())-indexShift}""");
-                }
-            }
-            
-            sb.append("""</td>""")
-            boolean noOutput = true
-            if (childItems.size()>0) {
-                String type = null;
-                for (SyncPair child: childItems) {
-                    if (!child.getObjectType().equals(type)){
-                        type = child.getObjectType();
-                        indexShift = 0;
-                    }
-                    if (!child.isSelected() && child.isOrdered()){
-                        indexShift++;
-                    }
-                    if (!child.isSelected() || (showChangesOnly 
-                            && child.getChangeType()==SyncPair.ChangeType.EQUALS && !child.isOrdered())) {
-                        continue
-                    } else {
-                        rowSpanNumber = 1
-                        sb.append("<!-- =1 -->");
-                    }
-                    if (noOutput) {
-                        sb.append("""<td colspan="3"><table style="width:100%;border:0" cellspacing="0" class="simple-table">""")
-                        noOutput = false
-                    }
-                    dumpItem(level+1, child, indexShift);
-                }
-                if (!noOutput) {
-                    sb.append("</table></td>")
-                }
-            }
-            def attributes = pair.getAttributes().sort { a,b ->  
-                def c = a.getChangeType().compareTo(b.getChangeType())
-                if (c==0) {
-                    c = a.attributeName.compareTo(b.attributeName)
-                }
-                return c
-            }
-            for (SyncAttributePair attr: attributes ) {
-                if (!attr.isSelected() || (showChangesOnly 
-                            && attr.getChangeType()==SyncAttributePair.AttributeChangeType.EQUALS)) {
-                    continue
-                } else {
-                   rowSpanNumber++ 
-                   sb.append("<!-- +1 attr ${attr.attributeName} -->");
-                }
-                if (noOutput) { 
-                    noOutput = false
-                } else {
-                    sb.append("</tr><tr>")
-                }
-                def style = """background-color:${colors[attr.getChangeType().toString()]}"""
-
-                if (longText.contains(pair.getObjectType()+"."+attr.getAttributeName())){
-                        sb.append("""<td style="${style}">${attr.attributeName}<span><!--hide:${pair.getObjectType()} ${attr.attributeName}-->&nbsp;<a href="">(view changes)</a> </span></td>
-                                 <td style="${style}"><div style="display:none">${attr.sourceValue==null ? "-not defined-" : attr.sourceValue}</div></td>
-                                 <td style="${style}"><div style="display:none">${attr.targetValue==null ? "-not defined-" : attr.targetValue}</div></td>""")
-                } else {
-                        style = """style="${style}" """
-                    sb.append("""<td ${style}>${attr.attributeName}</td>
-                                 <td ${style}>${attr.sourceValue==null ? "-not defined-" : attr.sourceValue}</td>
-                                 <td ${style}>${attr.targetValue==null ? "-not defined-" : attr.targetValue}</td>""")
-                }
-            }            
-            if (rowSpanNumber == 0) { rowSpanNumber = 1 }
-            sb.insert(rowSpanPosition, rowSpanNumber)
-            if (noOutput) {
-                sb.append("""<td colspan="3" style="border:0"></td>""")
-            }
-            sb.append("</tr>")
-        }
-    }
 }
 
 htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
