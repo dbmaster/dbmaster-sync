@@ -258,7 +258,7 @@ class PreviewGenerator {
             }
 
             // Handling object source code
-            def sourceAttr = pair.getAttributes().find { it.attributeName.equals("Source") }
+            def sourceAttr = pair.attributes.find { it.attributeName.equals("Source") }
             if (sourceAttr!=null) {
                 String sourceCode
                 if (sourceAttr.changeType == SyncAttributePair.AttributeChangeType.NEW) {
@@ -266,7 +266,7 @@ class PreviewGenerator {
                 } else {
                     sourceCode = sourceAttr.sourceValue
                 }
-                sb.append("<h3>Source Code</h3>")
+                sb.append("<h3>Source Code (${sourceAttr.changeType})</h3>")
                 if (sourceAttr.changeType == SyncAttributePair.AttributeChangeType.CHANGED) {
                     sb.append("""<table><tr>
                                  <td>${sourceAttr.attributeName}<span><!--hide:${pair.getObjectType()} ${sourceAttr.attributeName}-->&nbsp;<a href="">(view changes)</a> </span></td>
