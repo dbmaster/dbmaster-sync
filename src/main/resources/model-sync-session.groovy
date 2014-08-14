@@ -250,6 +250,7 @@ class ModelSyncSession extends SyncSession {
                     //    }
                     //}
                     //inventorySrv.updateDatabase(sourceDB);
+                    applyChangesForLists(sourceTable.getColumns(),targetTable.getColumns(), pair, "Column" );
                     pair.getChildren().each { importChanges(it, sourceTable) }
                     modelService.saveModelObject(sourceTable) 
                     break;
@@ -279,6 +280,7 @@ class ModelSyncSession extends SyncSession {
                         break;
                     case ChangeType.CHANGED:
                         sourceView.setSource( targetView.getSource() )
+                        applyChangesForLists(sourceView.getColumns(),targetView.getColumns(), pair, "Column");
                         pair.getChildren().each { importChanges(it, sourceView) }
                         modelService.saveModelObject(sourceView)
                         break;
@@ -308,6 +310,8 @@ class ModelSyncSession extends SyncSession {
                         break;
                     case ChangeType.CHANGED:
                         sourceProcedure.setSource( targetProcedure.getSource() )
+                        applyChangesForLists(sourceProcedure.getParameters(),targetProcedure.getParameters(), 
+                            pair, "Parameter");
                         pair.getChildren().each { importChanges(it, sourceProcedure) }
                         modelService.saveModelObject(sourceProcedure)
                         break;
@@ -339,6 +343,8 @@ class ModelSyncSession extends SyncSession {
                         sourceFunction.setSource( targetFunction.getSource() )
                         sourceFunction.setType( targetFunction.getType() )
                         sourceFunction.setExtraInfo( targetFunction.getExtraInfo() )
+                        applyChangesForLists(sourceFunction.getParameters(),targetFunction.getParameters(),
+                            pair, "Parameter");
                         pair.getChildren().each { importChanges(it, sourceFunction) }
                         modelService.saveModelObject(sourceFunction)
                         break;
@@ -369,6 +375,7 @@ class ModelSyncSession extends SyncSession {
                         sourceColumn.setPrecesion(targetColumn.getPrecesion())
                         sourceColumn.setDefaultValue(targetColumn.getDefaultValue())
                         sourceColumn.setExtraDefinition(targetColumn.getExtraDefinition())
+                        sourceColumn.setCustomData("Identity", targetColumn.getCustomData("Identity"));
                     case ChangeType.EQUALS:
                         break;
                     case ChangeType.DELETED:
@@ -424,7 +431,7 @@ class ModelSyncSession extends SyncSession {
                     case ChangeType.DELETED:
                         parentObject.removeIndex(sourceIndex)
                         // TODO - no method deleteIndex 
-                        // ?? modelService.deleteIndex(sourceColumn.getId())
+                        // modelService.deleteIndex(sourceColumn.getId())
                         break;
                     case ChangeType.EQUALS:
                         break;

@@ -100,6 +100,13 @@ class PreviewGenerator{
         sb.append("<b>");
         sb.append(pair.getTargetName()!=null?pair.getTargetName():pair.getSourceName());
         sb.append("</b>");
+        if (pair.getChangeType()==ChangeType.NEW){
+            sb.append(" (new)");
+        } else if (pair.getChangeType()==ChangeType.DELETED){
+            sb.append(" (deleted)");
+        } else if (pair.getChangeType()==ChangeType.COPIED){
+            sb.append(" (copied)");
+        }
         path.clear();
     }
     
@@ -186,7 +193,7 @@ class PreviewGenerator{
                 sb.append("""<div class="attr-header">Attrubute changes</div>""");
                 sb.append("""<table cellspacing=\"0\" class="simple-table attr">""");
                 sb.append("<tr>");
-                    sb.append("<th>Status</th>");
+                     sb.append("<th>Status</th>");
                     sb.append("<th>Name</th>");
                     sb.append("<th>Source</th>");
                     sb.append("<th>Target</th>");
@@ -206,10 +213,10 @@ class PreviewGenerator{
                         sb.append(changeAttrClass.get(child.getChangeType().ordinal()));
                          sb.append("\">");
                             sb.append("<td>");
-                                 sb.append(child.getAttributeName());
+                                 sb.append(""+child.getChangeType());
                             sb.append("</td>");
                             sb.append("<td>");
-                                sb.append(""+child.getChangeType());
+                                 sb.append(child.getAttributeName());
                             sb.append("</td>");
                             sb.append("<td>");
                                 if (child.getSourceValue()!=null){
