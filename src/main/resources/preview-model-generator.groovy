@@ -52,10 +52,17 @@ class PreviewGenerator {
     
     private void dumpItem(int level, SyncPair pair) {
         def typeOrder = { obj -> ["Table", "View", "Procedure", "Function" ].findIndexOf { obj.equals(it) } }
+        
+        sb.append("""<script type=\"text/javascript\">
+                     function toggle(id) {
+                         var e = document.getElementById(id);
+                         if (e.style.display == 'block') e.style.display = 'none';  else e.style.display = 'block';
+                     }
+                     </script>""")
 
         if (level==0) { // model level
-            def childItems = pair.getChildren().sort { 
-                a,b -> (typeOrder(a.objectType) <=> typeOrder(b.objectType)) * 10 + (a.pairName <=> b.pairName) }
+            def childItems = pair.children.sort 
+                   { a,b -> (typeOrder(a.objectType) <=> typeOrder(b.objectType)) * 10 + (a.pairName <=> b.pairName) }
             sb.append("<h1>Change Summary</h1>");
             sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">
                           <tr>
@@ -193,6 +200,54 @@ class PreviewGenerator {
                 }
                 sb.append("</table>")
             }
+            
+            // Handling parameters
+            def parameterPairs = pair.children.findAll { it.objectType.equals("Parameter") }
+            if (parameterPairs.size()>0) {
+                sb.append("<h3>Parameters</h3>")
+                sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
+                if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                    sb.append("<tr><td>Change</td><td>Parameter name</td><td>Parameter spec</td><td>Source definition</td></tr>")
+                } else {
+                    sb.append("<tr><td>Parameter name</td><td>Parameter spec</td></tr>")
+                }
+                
+                def parameterDefinition = { parameter ->
+                    if (parameter.getCustomData("is_computed") == 1) {
+                        "AS "+parameter.getCustomData("computedExpression")
+                        // TODO add is_persisted
+                    } else {                                                            
+                        def identity = parameter.getCustomData("is_identity")
+                        if (identity!=null) 
+                            System.out.println("Identity=${identity} ${identity.class.name}")
+
+                        parameter.prettyType.toUpperCase() + 
+                        ((identity != null && identity == 1) ? " IDENTITY" : "") +
+                        (parameter.nullable ? " NULL" : " NOT NULL") +
+                        // TODO Add quotes
+                        (parameter.defaultValue  ? " DEFAULT "+cleanDefault(parameter.defaultValue) : "")
+                    }
+                }
+                
+                parameterPairs.each { p ->
+                    def parameter = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
+                    sb.append("<tr>")
+                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                        sb.append("""<td style="background-color:${colors[p.changeType.toString()]}">${p.changeType}</td>""")
+                    }
+                    sb.append("<td>").append(p.pairName).append("</td>")
+                    sb.append("""<td>${parameterDefinition(parameter)}</td>""")
+                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                        if (p.changeType == SyncPair.ChangeType.CHANGED) {
+                            sb.append("<td>").append(parameterDefinition(p.source)).append("</td>")    
+                        } else { 
+                            sb.append("<td></td>")
+                        }
+                    }
+                    sb.append("</tr>")
+                }
+                sb.append("</table>")
+            }            
 
             // Handle indexes
             def indexPairs = pair.children.findAll { it.objectType.equals("Index") }
@@ -256,6 +311,45 @@ class PreviewGenerator {
                 }
                 sb.append("</table>")
             }
+            
+            // Handle constraints
+            def constraintPairs = pair.children.findAll { it.objectType.equals("Constraint") }
+            if (constraintPairs.size()>0) {
+                sb.append("<h3>Constraints</h3>")
+                sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
+                if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                    sb.append("<tr><td>Change</td><td>Constraint Name</td><td>Constraint Definition</td><td>Source Definition</td></tr>")
+                } else {
+                    sb.append("<tr><td>Constraint Name</td><td>Constraint Definition</td></tr>")
+                }
+
+                def constraintDefinition = { constraint ->
+                    String result=constraint.definition
+                    if (constraint.disabled) {
+                        result+=" DISABLED"
+                    }
+                    return result
+                }
+                
+                constraintPairs.each { p -> 
+                    def constraint = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
+                    sb.append("<tr>")
+                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                        sb.append("""<td style="background-color:${colors[p.changeType.toString()]}">${p.changeType}</td>""")
+                    }
+                    sb.append("<td>").append(p.pairName).append("</td>")
+                    sb.append("""<td>${constraintDefinition(constraint)}</td>""")
+                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                        if (p.changeType == SyncPair.ChangeType.CHANGED) {
+                            sb.append("<td>").append(constraintDefinition(p.source)).append("</td>")    
+                        } else { 
+                            sb.append("<td></td>")
+                        }
+                    }
+                    sb.append("</tr>")
+                }
+                sb.append("</table>")
+            }
 
             // Handling object source code
             def sourceAttr = pair.attributes.find { it.attributeName.equals("Source") }
@@ -266,7 +360,7 @@ class PreviewGenerator {
                 } else {
                     sourceCode = sourceAttr.sourceValue
                 }
-                sb.append("<h3>Source Code (${sourceAttr.changeType})</h3>")
+                sb.append("""<h3>Source code${sourceAttr.changeType == SyncAttributePair.AttributeChangeType.CHANGED?" (changed)":""}</h3>""")
                 if (sourceAttr.changeType == SyncAttributePair.AttributeChangeType.CHANGED) {
                     sb.append("""<table><tr>
                                  <td>${sourceAttr.attributeName}<span><!--hide:${pair.getObjectType()} ${sourceAttr.attributeName}-->&nbsp;<a href="">(view changes)</a> </span></td>
@@ -274,15 +368,20 @@ class PreviewGenerator {
                                  <td><div style="display:none">${sourceAttr.targetValue==null ? "-not defined-" : sourceAttr.targetValue}</div></td></tr></table>""")
                 } else {
                     // TODO encode source code
-                    sb.append("<pre>").append(sourceCode).append("</pre>")
+                    
+                    sb.append("<a target=\"_self\" href=\"javascript:void(toggle('sc${pair.id}'))\">(Show\hide source code)</a>")
+                    sb.append("<div id=\"sc${pair.id}\" style=\"display:none\">").append(sourceCode).append("</div>")
                 }
             }
             
             def childItems = pair.getChildren().each { child ->
-               if (showChangesOnly && child.getChangeType()==SyncPair.ChangeType.EQUALS && !child.isOrderChanged()) {
-                   return
-               }
-               if (!child.objectType.equals("Column") && !child.objectType.equals("Index")) dumpItem(level+1, child)
+                if (showChangesOnly && child.getChangeType()==SyncPair.ChangeType.EQUALS && !child.isOrderChanged()) {
+                    return
+                }
+                if (!child.objectType.equals("Column") && !child.objectType.equals("Index") 
+                 && !child.objectType.equals("Constraint") && !child.objectType.equals("Parameter")) {
+                    dumpItem(level+1, child)
+                }
             }
             /*
             def rowSpanNumber = 0 
