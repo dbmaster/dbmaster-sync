@@ -185,7 +185,19 @@ class PreviewGenerator {
                     def column = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
                     if (pair.changeType==SyncPair.ChangeType.CHANGED) {
-                        sb.append("""<td style="background-color:${colors[p.changeType.toString()]}">${p.changeType}</td>""")
+                        sb.append("<td style=\"background-color:")
+                        if (p.changeType==SyncPair.ChangeType.EQUALS && p.orderChanged) {
+                            sb.append(colors[SyncPair.ChangeType.CHANGED.toString()]).append("\">MOVED")
+                        } else {
+                            sb.append(colors[p.changeType.toString()]).append("\">").append(p.changeType.toString())
+                        }
+                        if (p.orderChanged) {
+                            sb.append(" (")
+                              .append(p.sourceIndex == null ? 999 : p.sourceIndex+1)
+                              .append("&nbsp;to&nbsp;")
+                              .append(p.targetIndex == null ? 999 : p.targetIndex+1)
+                              .append(")")
+                        }
                     }
                     sb.append("<td>").append(p.pairName).append("</td>")
                     sb.append("""<td>${columnDefinition(column)}</td>""")
@@ -212,6 +224,7 @@ class PreviewGenerator {
                     sb.append("<tr><td>Parameter name</td><td>Parameter spec</td></tr>")
                 }
                 
+                // TODO - review this closure
                 def parameterDefinition = { parameter ->
                     if (parameter.getCustomData("is_computed") == 1) {
                         "AS "+parameter.getCustomData("computedExpression")
@@ -232,9 +245,23 @@ class PreviewGenerator {
                 parameterPairs.each { p ->
                     def parameter = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
+
                     if (pair.changeType==SyncPair.ChangeType.CHANGED) {
-                        sb.append("""<td style="background-color:${colors[p.changeType.toString()]}">${p.changeType}</td>""")
+                        sb.append("<td style=\"background-color:")
+                        if (p.changeType==SyncPair.ChangeType.EQUALS && p.orderChanged) {
+                            sb.append(colors[SyncPair.ChangeType.CHANGED.toString()]).append("\">MOVED")
+                        } else {
+                            sb.append(colors[p.changeType.toString()]).append("\">").append(p.changeType.toString())
+                        }
+                        if (p.orderChanged) {
+                            sb.append(" (")
+                              .append(p.sourceIndex == null ? 999 : p.sourceIndex+1)
+                              .append("&nbsp;to&nbsp;")
+                              .append(p.targetIndex == null ? 999 : p.targetIndex+1)
+                              .append(")")
+                        }
                     }
+
                     sb.append("<td>").append(p.pairName).append("</td>")
                     sb.append("""<td>${parameterDefinition(parameter)}</td>""")
                     if (pair.changeType==SyncPair.ChangeType.CHANGED) {
@@ -369,8 +396,8 @@ class PreviewGenerator {
                 } else {
                     // TODO encode source code
                     
-                    sb.append("<a target=\"_self\" href=\"javascript:void(toggle('sc${pair.id}'))\">(Show\hide source code)</a>")
-                    sb.append("<div id=\"sc${pair.id}\" style=\"display:none\">").append(sourceCode).append("</div>")
+                    sb.append("<a target=\"_self\" href=\"javascript:void(toggle('sc${pair.id}'))\">(Show\\hide source code)</a>")
+                    sb.append("<div id=\"sc${pair.id}\" style=\"display:none\"><pre>").append(sourceCode).append("</pre></div>")
                 }
             }
             
@@ -383,27 +410,6 @@ class PreviewGenerator {
                     dumpItem(level+1, child)
                 }
             }
-            /*
-            def rowSpanNumber = 0 
-            // def childItems = pair.getChildren().sort(syncPairSorter)
-            if ((!showChangesOnly && childItems.size()>0)
-                ||(showChangesOnly && childItems.find {it.getChangeType()!=SyncPair.ChangeType.EQUALS}!=null)) {
-                rowSpanNumber++;
-                sb.append("<!-- +1 child items changes only ${showChangesOnly}-->");
-            }
-            sb.append("""<tr>
-                         <td style="vertical-align:top;width:20%;background-color:${colors[pair.getChangeType().toString()]}" rowspan=" """)
-
-            int rowSpanPosition = sb.size()
-            sb.append(""""> ${pair.getChangeType()}<br/>${pair.getObjectType()}<br/><b>${pair.getPairName()}</b>""")
-            if (pair.isOrderChanged()){
-                sb.append("""<br/>Move&nbsp;from&nbsp;index&nbsp;${inc(pair.getSourceIndex())}&nbsp;to&nbsp;${inc(pair.getTargetIndex())}""");
-            } else if (pair.getTargetIndex()!=null){
-                sb.append("""<br/>Insert&nbsp;at&nbsp;index&nbsp;${inc(pair.getTargetIndex())}""");
-            } else if (pair.isOrderedDelete()){
-                sb.append("""<br/>Delete&nbsp;at&nbsp;index&nbsp;${inc(pair.getSourceIndex())}""");
-            }
-            */
         }
     }
 }
