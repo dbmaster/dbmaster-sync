@@ -170,8 +170,6 @@ class PreviewGenerator {
                         // TODO add is_persisted
                     } else {                                                            
                         def identity = column.getCustomData("is_identity")
-                        if (identity!=null) 
-                            System.out.println("Identity=${identity} ${identity.class.name}")
 
                         column.prettyType.toUpperCase() + 
                         ((identity != null && identity == 1) ? " IDENTITY" : "") +
@@ -226,20 +224,10 @@ class PreviewGenerator {
                 
                 // TODO - review this closure
                 def parameterDefinition = { parameter ->
-                    if (parameter.getCustomData("is_computed") == 1) {
-                        "AS "+parameter.getCustomData("computedExpression")
-                        // TODO add is_persisted
-                    } else {                                                            
-                        def identity = parameter.getCustomData("is_identity")
-                        if (identity!=null) 
-                            System.out.println("Identity=${identity} ${identity.class.name}")
-
                         parameter.prettyType.toUpperCase() + 
-                        ((identity != null && identity == 1) ? " IDENTITY" : "") +
                         (parameter.nullable ? " NULL" : " NOT NULL") +
                         // TODO Add quotes
                         (parameter.defaultValue  ? " DEFAULT "+cleanDefault(parameter.defaultValue) : "")
-                    }
                 }
                 
                 parameterPairs.each { p ->
