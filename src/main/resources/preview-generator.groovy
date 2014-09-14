@@ -131,8 +131,7 @@ class PreviewGenerator{
                         sb.append("<th>Target</th>");
                     sb.append("</tr>");
                     for (SyncPair child: pair.getChildren()){
-                        if (!showChangesOnly || child.isOrdered()
-                                || child.getChangeType()!=ChangeType.EQUALS){
+                        if (!showChangesOnly || child.isOrdered() || child.getChangeType()!=ChangeType.EQUALS){
                             sb.append("<tr class=\"");
                             sb.append(changePairClass.get(child.getChangeType().ordinal()));
                             sb.append("\">");
@@ -205,12 +204,13 @@ class PreviewGenerator{
                     }
                     return c
                 }
+                Integer changeType = pair.getChangeType()==ChangeType.NEW?AttributeChangeType.NEW.ordinal():(pair.getChangeType()==ChangeType.DELETED?AttributeChangeType.DELETED.ordinal():null);
                 for (SyncAttributePair child: pair.getAttributes()){
                     if (!showChangesOnly || child.getChangeType()!=AttributeChangeType.EQUALS){
                         boolean pre = longText.contains(pair.getObjectType()+"."+child.getAttributeName());
                         
                         sb.append("<tr class=\"");
-                        sb.append(changeAttrClass.get(child.getChangeType().ordinal()));
+                        sb.append(changeAttrClass.get(changeType != null ? changeType: child.getChangeType().ordinal()));
                          sb.append("\">");
                             sb.append("<td>");
                                  sb.append(""+child.getChangeType());
