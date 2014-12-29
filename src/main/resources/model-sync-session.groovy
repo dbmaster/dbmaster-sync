@@ -178,6 +178,9 @@ targetParameter?.getDefaultValue()))
             attributes.add(new SyncAttributePair("Included Columns",
                                                  columnsAsText(sourceIndex?.getColumns(),true),
                                                  columnsAsText(targetIndex?.getColumns(),true)))
+                                                 
+            attributes.add(new SyncAttributePair("Unique", sourceIndex?.isUnique(),
+                                                           targetIndex?.isUnique()))
 
             attributes.add(new SyncAttributePair("Disabled", sourceIndex?.isDisabled(),
                                                              targetIndex?.isDisabled()))
@@ -495,12 +498,12 @@ class ModelSyncSession extends SyncSession {
 
 modelService = dbm.getService(ModelService.class)
 sync_session = new ModelSyncSession(dbm)
-sync_session.sourceModel = model
+if (source instanceof Model) {
+    sync_session.sourceModel = source
+}
 
 
-sync_session.syncObjects(model, targetModel)
+sync_session.syncObjects(source, target)
 sync_session.setParameter("title", "Model Synchronization")
 sync_session.setParameter("longText", "Procedure.Source;View.Source;Function.Source")
 // TODO (implement) sync_session.setParameter("exclude_objects", p_exclude_objects==null ? "" : p_exclude_objects.join(","))
-
-
