@@ -200,6 +200,24 @@ targetParameter?.getDefaultValue()))
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
         }
+        
+        Collection<String> keys = session.getParameter("customFieldMap").get(objectType);
+        if (keys != null){
+           if (pair.getSource() == null && pair.getTarget() != null){
+               for (String key:keys){
+                   pair.getAttributes().add(new SyncAttributePair(key,null, pair.getTarget().getCustomData(key)));
+               }
+           } else if (pair.getSource() != null && pair.getTarget() == null){
+               for (String key:keys){
+                   pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),null));
+               }
+           } else {
+               for (String key:keys){
+                   pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),
+                       pair.getTarget().getCustomData(key)));
+               }
+           }
+        }
     }
 }
 
@@ -220,6 +238,9 @@ class ModelSyncSession extends SyncSession {
             this.modelService = dbm.getService(ModelService.class)
 
             importChanges(getSyncResult(), sourceModel)
+            
+            getAllParameters().remove("customFieldMap");
+            
             SyncService syncService = dbm.getService(SyncService.class)
             syncService.saveSession(this, "Model Import")
             
@@ -231,6 +252,20 @@ class ModelSyncSession extends SyncSession {
 
     public void importChanges(SyncPair pair, DatabaseObject parentObject) {
         String objectType = pair.getObjectType();
+        
+        Collection<String> keys = getParameter("customFieldMap").get(objectType);
+        if (keys!=null){
+            DatabaseObject source = pair.getSource();
+            if (pair.getChangeType() == ChangeType.CHANGED){
+                for (SyncAttributePair attr : pair.getAttributes()) {
+                    if (attr.getChangeType() != SyncAttributePair.AttributeChangeType.EQUALS &&
+                            keys.contains(attr.getAttributeName())) {
+                        source.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
+                    }
+                }
+            }
+        }
+        
         if (objectType ==~ /Model/) {
             pair.getChildren().each { importChanges(it, sourceModel) }
         } else if (objectType.equals("Table")) {
@@ -498,6 +533,11 @@ class ModelSyncSession extends SyncSession {
 
 modelService = dbm.getService(ModelService.class)
 sync_session = new ModelSyncSession(dbm)
+
+sync_session.setParameter("customFieldMap", binding.variables.get("customFieldMap") == null
+    ? Collections.emptyMap()
+    : binding.variables.get("customFieldMap"))
+
 if (source instanceof Model) {
     sync_session.sourceModel = source
 }
