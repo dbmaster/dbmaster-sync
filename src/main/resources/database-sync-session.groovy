@@ -1,3 +1,5 @@
+import com.branegy.dbmaster.sync.api.*
+import com.branegy.dbmaster.sync.impl.*
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -28,6 +30,8 @@ import com.branegy.scripting.DbMaster
 import com.branegy.service.core.QueryRequest
 import com.branegy.dbmaster.sync.api.SyncSession.SearchTarget
 import com.branegy.dbmaster.sync.api.SyncService;
+import com.branegy.service.core.search.CustomCriterion;
+import com.branegy.service.core.search.CustomCriterion.Operator;
 
 class InventoryNamer implements Namer {
         @Override
@@ -152,6 +156,8 @@ class InventorySyncSession extends SyncSession {
     DbMaster dbm
     InventoryService inventorySrv
     ConnectionService connectionSrv
+    Map<String, Database> connectionDbMap;
+    
 
     public InventorySyncSession(DbMaster dbm) {
         super(new InventoryComparer());
@@ -163,6 +169,20 @@ class InventorySyncSession extends SyncSession {
 
     public void applyChanges() {
         try {        
+            connectionDbMap = [:]
+            QueryRequest q;
+            // TODO: fix delimeter char %
+            q = new QueryRequest();
+            q.getCriteria().add(new CustomCriterion("\"Deleted\"", Operator.EQ, "no"));
+            inventorySrv.getDatabaseList(q).each{ db ->
+                connectionDbMap.put( db.getConnectionName()+"%"+db.getDatabaseName(), value);
+            }
+            q = new QueryRequest();
+            q.getCriteria().add(new CustomCriterion("\"Deleted\"", Operator.EQ, "yes"));
+            inventorySrv.getDatabaseList(q).each{ db ->
+                connectionDbMap.put( db.getConnectionName()+"%"+db.getDatabaseName(), value);
+            }
+            
             importChanges(getSyncResult());
             SyncService syncService = dbm.getService    (SyncService.class);
             syncService.saveSession(this, "Database Import");
@@ -182,10 +202,8 @@ class InventorySyncSession extends SyncSession {
             switch (pair.getChangeType()) {
                 case ChangeType.NEW:
                     String serverName = pair.getParentPair().getSourceName()
-                    def db = null
-                    try {
-                        db = inventorySrv.findDatabaseByServerNameDbName(serverName, targetDB.getName())                        
-                    } catch (EntityNotFoundApiException e) {
+                    def db = connectionDbMap.get(serverName+"%"+targetDB.getName());
+                    if (db == null){
                         db = new Database()
                         db.setDatabaseName(targetDB.getName())
                         db.setServerName(serverName)
