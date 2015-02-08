@@ -175,12 +175,12 @@ class InventorySyncSession extends SyncSession {
             q = new QueryRequest();
             q.getCriteria().add(new CustomCriterion("\"Deleted\"", Operator.EQ, "no"));
             inventorySrv.getDatabaseList(q).each{ db ->
-                connectionDbMap.put( db.getConnectionName()+"%"+db.getDatabaseName(), value);
+                connectionDbMap.put( db.getConnectionName()+"%"+db.getDatabaseName(), db);
             }
             q = new QueryRequest();
             q.getCriteria().add(new CustomCriterion("\"Deleted\"", Operator.EQ, "yes"));
             inventorySrv.getDatabaseList(q).each{ db ->
-                connectionDbMap.put( db.getConnectionName()+"%"+db.getDatabaseName(), value);
+                connectionDbMap.put( db.getConnectionName()+"%"+db.getDatabaseName(), db);
             }
             
             importChanges(getSyncResult());
