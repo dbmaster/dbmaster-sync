@@ -163,6 +163,10 @@ targetParameter?.getDefaultValue()))
                 String result = null
                 if (columns!=null) {
                     def filtered = columns.findAll { it.included == included }
+                    if ( included ) {
+                       // For filtered columns order doesn't matter
+                       filtered.sort { it.columnName  }
+                    }
                     if (filtered.size()>0) {
                         result = filtered.collect { it.getColumnName()+ (it.isAsc() ? " asc" : " desc") }
                                          .join (",")
