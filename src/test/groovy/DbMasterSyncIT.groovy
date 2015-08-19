@@ -1,0 +1,18 @@
+import io.dbmaster.testng.BaseToolTestNGCase;
+
+import static org.testng.Assert.assertTrue;
+import org.testng.annotations.Test
+
+import com.branegy.tools.api.ExportType;
+
+
+public class DbMasterSyncIT extends BaseToolTestNGCase {
+
+    @Test
+    public void testList() {
+        def parameters = [  :  ]
+        String result = tools.toolExecutor("sync-history", parameters).execute()
+        assertTrue(result.contains("Session"), "Unexpected search results ${result}");
+        assertTrue(result.contains("Type"), "Unexpected search results ${result}");
+    }
+}
