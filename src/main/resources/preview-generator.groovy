@@ -62,7 +62,7 @@ class PreviewGenerator{
             SyncPair p = queue.removeFirst();
             printScreen(p);
             if (p.hasChildren()){
-                p.getChildren().sort(syncPairSorter);
+                p.getChildren().sort{syncPairSorter};
                 for (SyncPair p2:p.getChildren()){
                    if (p2.hasChildrenChanges() || p2.hasAttributeChanges()){
                        queue.addLast(p2);
