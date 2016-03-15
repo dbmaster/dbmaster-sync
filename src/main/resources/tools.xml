@@ -8,8 +8,9 @@
         <description>Shows details of sync session</description>
 
         <parameters>
-            <parameter name="p_session_id"   title="Session id"      type="INTEGER" required="true" visible="false" />
-            <parameter name="p_title"        title="Session title"   type="STRING"  required="true" visible="false" />
+            <parameter name="p_session_id"        title="Session id"        type="INTEGER" required="true" visible="true"       />
+            <parameter name="p_title"             title="Session title"     type="STRING"  required="true" visible="false"      />
+            <parameter name="p_show_changes_only" title="Show changes only" type="BOOLEAN" required="true" defaultValue="false" />
         </parameters>
 
         <output  script="sync-history-details.groovy" type="html" />
