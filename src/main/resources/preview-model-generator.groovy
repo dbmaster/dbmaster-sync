@@ -2,8 +2,7 @@ import java.util.Comparator;
 import java.util.Arrays;
 import java.util.Collections;
 
-//import static org.apache.commons.lang3.StringEscapeUtils.escapeHtml;
-//String escaped = escapeHtml(source);
+import static org.apache.commons.lang.StringEscapeUtils.escapeHtml;
 
 import com.branegy.dbmaster.sync.api.*;
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
@@ -52,15 +51,15 @@ class PreviewGenerator {
     
     private void dumpItem(int level, SyncPair pair) {
         def typeOrder = { obj -> ["Table", "View", "Procedure", "Function" ].findIndexOf { obj.equals(it) } }
-        
-        sb.append("""<script type=\"text/javascript\">
+        if (level==0) { // model level
+            sb.append("""<script type=\"text/javascript\">
                      function toggle(id) {
                          var e = document.getElementById(id);
                          if (e.style.display == 'block') e.style.display = 'none';  else e.style.display = 'block';
                      }
-                     </script>""")
-
-        if (level==0) { // model level
+                     </script>""");
+            
+            
             def childItems = pair.children.sort 
                    { a,b -> (typeOrder(a.objectType) <=> typeOrder(b.objectType)) * 10 + (a.pairName <=> b.pairName) }
             sb.append("<h1>Change Summary</h1>");
@@ -369,23 +368,41 @@ class PreviewGenerator {
             // Handling object source code
             def sourceAttr = pair.attributes.find { it.attributeName.equals("Source") }
             if (sourceAttr!=null) {
-                String sourceCode
-                if (sourceAttr.changeType == SyncAttributePair.AttributeChangeType.NEW) {
-                    sourceCode = sourceAttr.targetValue
-                } else {
-                    sourceCode = sourceAttr.sourceValue
-                }
-                sb.append("""<h3>Source code${sourceAttr.changeType == SyncAttributePair.AttributeChangeType.CHANGED?" (changed)":""}</h3>""")
+                sb.append("<h3>Source code");
                 if (sourceAttr.changeType == SyncAttributePair.AttributeChangeType.CHANGED) {
-                    sb.append("""<table><tr>
-                                 <td>${sourceAttr.attributeName}<span><!--hide:${pair.getObjectType()} ${sourceAttr.attributeName}-->&nbsp;<a href="">(view changes)</a> </span></td>
-                                 <td><div style="display:none">${sourceAttr.sourceValue==null ? "-not defined-" : sourceAttr.sourceValue}</div></td>
-                                 <td><div style="display:none">${sourceAttr.targetValue==null ? "-not defined-" : sourceAttr.targetValue}</div></td></tr></table>""")
-                } else {
-                    // TODO encode source code
+                    sb.append(" (changed)");
+                }
+                sb.append("</h3>");
+                if (sourceAttr.changeType == SyncAttributePair.AttributeChangeType.CHANGED) {
+                    sb.append("<table><tr>");
                     
-                    sb.append("<a target=\"_self\" href=\"javascript:void(toggle('sc${pair.id}'))\">(Show\\hide source code)</a>")
-                    sb.append("<div id=\"sc${pair.id}\" style=\"display:none\"><pre>").append(sourceCode).append("</pre></div>")
+                    sb.append("<td>");
+                    sb.append(sourceAttr.attributeName);
+                    sb.append("<span><!--hide:");
+                    sb.append(pair.getObjectType());
+                    sb.append(' ');
+                    sb.append(sourceAttr.attributeName);
+                    sb.append("-->&nbsp;<a href=\"\">(view changes)</a></span></td>");
+                    
+                    sb.append("<td><div style=\"display:none\">");
+                    sb.append(sourceAttr.sourceValue==null ? "-not defined-" : escapeHtml(sourceAttr.sourceValue));
+                    sb.append("</div></td>");
+                    
+                    sb.append("<td><div style=\"display:none\">");
+                    sb.append(sourceAttr.targetValue==null ? "-not defined-" : escapeHtml(sourceAttr.targetValue));
+                    sb.append("</div></td>");
+                    
+                    sb.append("</tr></table>");
+                } else {
+                    sb.append("<a target=\"_self\" href=\"javascript:void(toggle('sc");
+                    sb.append(pair.id);
+                    sb.append("'))\">(Show\\hide source code)</a>");
+                    
+                    sb.append("<div id=\"sc");
+                    sb.append(pair.id);
+                    sb.append("\" style=\"display:none\"><pre>");
+                    sb.append(escapeHtml(sourceAttr.changeType == SyncAttributePair.AttributeChangeType.NEW ? sourceAttr.targetValue : sourceAttr.sourceValue));
+                    sb.append("</pre></div>");
                 }
             }
             
