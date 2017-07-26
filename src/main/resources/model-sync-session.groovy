@@ -40,6 +40,7 @@ class ModelNamer implements Namer {
         } else if (o instanceof Index)      {  return "Index"
         } else if (o instanceof Constraint) {  return "Constraint"
         } else if (o instanceof ForeignKey) {  return "ForeignKey"
+        } else if (o instanceof Trigger)    {  return "Trigger"
         } else {
             throw new IllegalArgumentException("Unexpected object class "+o);
         }
@@ -82,8 +83,10 @@ class ModelComparer extends BeanComparer {
             if (exludeObjects==null || !exludeObjects.contains("Constraints")) {
                 childPairs.addAll(mergeCollections(pair, sourceTable?.getConstraints(), targetTable?.getConstraints(), namer));
             }
-
-            childPairs.addAll(mergeCollections(pair, sourceTable?.getForeignKeys(), targetTable?.getForeignKeys(), namer));
+            
+            if (exludeObjects==null || !exludeObjects.contains("Triggers")) {
+                childPairs.addAll(mergeCollections(pair, sourceTable?.getTriggers(), targetTable?.getTriggers(), namer));
+            }
         } else if (objectType.equals("View")) {
             View sourceView = (View)pair.getSource();
             View targetView = (View)pair.getTarget();
@@ -201,6 +204,17 @@ targetParameter?.getDefaultValue()))
         
         } else if (objectType.equals("ForeignKey")) {
             // TODO Compare FKs
+        } else if (objectType.equals("Trigger")) {
+            Trigger sourceTrigger = (Trigger)pair.getSource();
+            Trigger targetTrigger = (Trigger)pair.getTarget();
+            
+            def attributes = pair.getAttributes()
+            
+            attributes.add(new SyncAttributePair("Disabled",   sourceTrigger?.isDisabled(),
+                                                               targetTrigger?.isDisabled()));
+            attributes.add(new SyncAttributePair("Source",     sourceTrigger?.getSource(),
+                                                               targetTrigger?.getSource()));
+          
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
         }
@@ -549,5 +563,5 @@ if (source instanceof Model) {
 
 sync_session.syncObjects(source, target)
 sync_session.setParameter("title", "Model Synchronization")
-sync_session.setParameter("longText", "Procedure.Source;View.Source;Function.Source")
+sync_session.setParameter("longText", "Procedure.Source;View.Source;Function.Source;Trigger.Source")
 // TODO (implement) sync_session.setParameter("exclude_objects", p_exclude_objects==null ? "" : p_exclude_objects.join(","))
