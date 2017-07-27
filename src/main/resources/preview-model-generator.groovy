@@ -1,11 +1,11 @@
-import java.util.Comparator;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.Comparator
+import java.util.Arrays
+import java.util.Collections
 
-import static org.apache.commons.lang.StringEscapeUtils.escapeHtml;
+import static org.apache.commons.lang.StringEscapeUtils.escapeHtml
 
-import com.branegy.dbmaster.sync.api.*;
-import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
+import com.branegy.dbmaster.sync.api.*
+import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
 
 class PreviewGenerator {
     def colors = [
@@ -338,7 +338,7 @@ class PreviewGenerator {
                 }
 
                 def constraintDefinition = { constraint ->
-                    String result=constraint.definition
+                    String result=escapeHtml(constraint.definition)
                     if (constraint.disabled) {
                         result+=" DISABLED"
                     }
