@@ -43,7 +43,7 @@ class PreviewGenerator {
     
     private cleanDefault (String value) {
         if (value==null || value.length()<2 || !(value.startsWith("(")  && value.endsWith(")"))) {
-            return value
+            return escapeHtml(value);
         } else {
             return cleanDefault(value[1..value.length()-2])
         }
