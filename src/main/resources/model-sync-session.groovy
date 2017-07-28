@@ -14,6 +14,7 @@ import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
 import com.branegy.dbmaster.database.api.ModelService
 import com.branegy.scripting.DbMaster
 import com.branegy.service.core.QueryRequest
+import com.branegy.dbmaster.sync.api.SyncAttributePair.SyncAttributeComparator;
 import com.branegy.dbmaster.sync.api.SyncSession.SearchTarget
 import com.branegy.dbmaster.sync.api.SyncService
 import com.branegy.dbmaster.model.*
@@ -50,6 +51,11 @@ class ModelNamer implements Namer {
 class ModelComparer extends BeanComparer {
     Model    source
     Model    target
+    SyncAttributeComparator<?> sourceComparator;
+    
+    public ModelComparer(boolean ignoreWhitespaces) {
+        sourceComparator = ignoreWhitespaces?SyncAttributeComparators.IGNORE_WHITESPACES:SyncAttributeComparators.DEFAULT;
+    }
     
     private cleanDefault (String value) {
         if (value==null || value.length()<2 || !(value.startsWith("(")  && value.endsWith(")"))) {
@@ -95,7 +101,8 @@ class ModelComparer extends BeanComparer {
             childPairs.addAll(mergeLists(pair, sourceView?.getColumns(),targetView?.getColumns(), namer));
             def attributes = pair.getAttributes()
             attributes.add(new SyncAttributePair("Source", sourceView?.getSource(),
-                                                           targetView?.getSource()))
+                                                           targetView?.getSource(),
+                                                           sourceComparator))
         } else if (objectType.equals("Function")) {
             Function sourceFunc = (Function)pair.getSource();
             Function targetFunc = (Function)pair.getTarget();
@@ -106,7 +113,8 @@ class ModelComparer extends BeanComparer {
                                                targetFunc?.getParameters(), namer));
             def attributes = pair.getAttributes()
             attributes.add(new SyncAttributePair("Source", sourceFunc?.getSource(),
-                                                           targetFunc?.getSource()))
+                                                           targetFunc?.getSource(),
+                                                           sourceComparator))
             attributes.add(new SyncAttributePair(Function.TYPE, sourceFunc?.getType(),
                                                                 targetFunc?.getType()))
             attributes.add(new SyncAttributePair(Function.EXTRA_INFO, sourceFunc?.getExtraInfo(),
@@ -121,7 +129,8 @@ class ModelComparer extends BeanComparer {
                                                targetProc?.getParameters(), namer));
             def attributes = pair.getAttributes()
             attributes.add(new SyncAttributePair("Source", sourceProc?.getSource(),
-                                                           targetProc?.getSource()))
+                                                           targetProc?.getSource(),
+                                                           sourceComparator))
         } else if (objectType.equals("Column")) {
             Column sourceColumn = (Column)pair.getSource();
             Column targetColumn = (Column)pair.getTarget();
@@ -213,7 +222,8 @@ targetParameter?.getDefaultValue()))
             attributes.add(new SyncAttributePair("Disabled",   sourceTrigger?.isDisabled(),
                                                                targetTrigger?.isDisabled()));
             attributes.add(new SyncAttributePair("Source",     sourceTrigger?.getSource(),
-                                                               targetTrigger?.getSource()));
+                                                               targetTrigger?.getSource(),
+                                                               sourceComparator));
           
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
@@ -245,8 +255,8 @@ class ModelSyncSession extends SyncSession {
     // modelService used in applyChanges
     ModelService modelService
 
-    public ModelSyncSession(DbMaster dbm) {
-        super(new ModelComparer())
+    public ModelSyncSession(DbMaster dbm, boolean ignoreWhitespaces) {
+        super(new ModelComparer(ignoreWhitespaces))
         setNamer(new ModelNamer())
         this.dbm = dbm
     }
@@ -549,8 +559,13 @@ class ModelSyncSession extends SyncSession {
     }
 }
 
+def p_ignoreWhitespaces = false;
+if (binding.variables["ignoreWhitespaces"]) {
+    p_ignoreWhitespaces = ignoreWhitespaces;
+}
+
 modelService = dbm.getService(ModelService.class)
-sync_session = new ModelSyncSession(dbm)
+sync_session = new ModelSyncSession(dbm, p_ignoreWhitespaces)
 
 sync_session.setParameter("customFieldMap", binding.variables.get("customFieldMap") == null
     ? Collections.emptyMap()
