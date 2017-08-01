@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory
 
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.impl.*
+import com.branegy.dbmaster.sync.impl.BeanComparer.MergeKeySupplier;
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
 import com.branegy.dbmaster.database.api.ModelService
 import com.branegy.scripting.DbMaster
@@ -84,10 +85,52 @@ class ModelComparer extends BeanComparer {
             List<SyncPair> childPairs = pair.getChildren()
             
             childPairs.addAll(mergeLists(pair, sourceTable?.getColumns(), targetTable?.getColumns(), namer));
-            childPairs.addAll(mergeCollections(pair, sourceTable?.getIndexes(), targetTable?.getIndexes(), namer));
+            childPairs.addAll(mergeCollections(pair, sourceTable?.getIndexes(), targetTable?.getIndexes(), new MergeKeySupplier<Index>(){
+                
+                def columnsAsText = { columns, included ->
+                    String result = null
+                    if (columns!=null) {
+                        def filtered = columns.findAll { it.included == included }
+                        if (filtered.size()>0) {
+                            result = filtered.collect { it.getColumnName()+ (it.isAsc() ? " asc" : " desc") }.join (", ")
+                        }
+                    }
+                    return result
+                }
+        
+                def indexDefinition = {Index index ->
+                    String result=""
+                    if (index.primaryKey) {
+                        result="PRIMARY KEY"
+                    }
+                    if (!index.primaryKey) {
+                        result+=" "+(index.unique ? "UNIQUE":"")
+                    }
+
+                    result +=" "+index.type.toString().toUpperCase();
+                    result +=  " (" + columnsAsText(index?.getColumns(),false) + ")"
+                    String included = columnsAsText(index?.getColumns(),true)
+                    if (included!=null) {
+                           result += " INCLUDE ("+included+")"
+                    }
+                    if (index.disabled) {
+                            result += " DISABLED"
+                    }
+                    return result
+                }
+                
+                public String getKey(Index o) {
+                    return indexDefinition(o);
+                }
+            }));
+           
 
             if (exludeObjects==null || !exludeObjects.contains("Constraints")) {
-                childPairs.addAll(mergeCollections(pair, sourceTable?.getConstraints(), targetTable?.getConstraints(), namer));
+                childPairs.addAll(mergeCollections(pair, sourceTable?.getConstraints(), targetTable?.getConstraints(), new MergeKeySupplier<Constraint>(){
+                    public String getKey(Constraint o) {
+                        return o.getDefinition();
+                    }
+                }));
             }
             
             if (exludeObjects==null || !exludeObjects.contains("Triggers")) {
@@ -169,6 +212,10 @@ targetParameter?.getDefaultValue()))
         } else if (objectType.equals("Index")) {
             Index sourceIndex = (Index)pair.getSource();
             Index targetIndex = (Index)pair.getTarget();
+            
+            if (pair.getChangeType() == ChangeType.EQUALS && !sourceIndex.getName().equals(targetIndex.getName())) {
+                pair.setChangeType(ChangeType.CHANGED);
+            }
         
             def attributes = pair.getAttributes()
             def columnsAsText = { columns, included ->
@@ -203,6 +250,10 @@ targetParameter?.getDefaultValue()))
         } else if (objectType.equals("Constraint")) {
             Constraint sourceConstraint = (Constraint)pair.getSource();
             Constraint targetConstraint = (Constraint)pair.getTarget();
+            
+            if (pair.getChangeType() == ChangeType.EQUALS && !sourceConstraint.getName().equals(targetConstraint.getName())) {
+                pair.setChangeType(ChangeType.CHANGED);
+            }
 
             def attributes = pair.getAttributes()
             attributes.add(new SyncAttributePair("Definition", sourceConstraint?.getDefinition(),

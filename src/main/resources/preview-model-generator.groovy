@@ -312,7 +312,11 @@ class PreviewGenerator {
                     if (pair.changeType==SyncPair.ChangeType.CHANGED) {
                         sb.append("""<td style="background-color:${colors[p.changeType.toString()]}">${p.changeType}</td>""")
                     }
-                    sb.append("<td>").append(p.pairName).append("</td>")
+                    if (p.changeType==SyncPair.ChangeType.CHANGED && !p.getSourceName().equals(p.getTargetName())) {
+                        sb.append("<td>").append(p.getTargetName()).append(" (renamed from ").append(p.getSourceName()).append(")").append("</td>")
+                    } else {
+                        sb.append("<td>").append(p.pairName).append("</td>")
+                    }
                     sb.append("""<td>${indexDefinition(index)}</td>""")
                     if (pair.changeType==SyncPair.ChangeType.CHANGED) {
                         if (p.changeType == SyncPair.ChangeType.CHANGED) {
