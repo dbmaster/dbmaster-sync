@@ -52,10 +52,12 @@ class ModelNamer implements Namer {
 class ModelComparer extends BeanComparer {
     Model    source
     Model    target
-    SyncAttributeComparator<?> sourceComparator;
+    final SyncAttributeComparator<?> sourceComparator;
+    final boolean ignoreColumnOrderChanges;
     
-    public ModelComparer(boolean ignoreWhitespaces) {
+    public ModelComparer(boolean ignoreWhitespaces, boolean ignoreColumnOrderChanges) {
         sourceComparator = ignoreWhitespaces?SyncAttributeComparators.IGNORE_WHITESPACES:SyncAttributeComparators.DEFAULT;
+        this.ignoreColumnOrderChanges = ignoreColumnOrderChanges;
     }
     
     private cleanDefault (String value) {
@@ -84,7 +86,12 @@ class ModelComparer extends BeanComparer {
 
             List<SyncPair> childPairs = pair.getChildren()
             
-            childPairs.addAll(mergeLists(pair, sourceTable?.getColumns(), targetTable?.getColumns(), namer));
+            def columnPairs = mergeLists(pair, sourceTable?.getColumns(), targetTable?.getColumns(), namer)
+            if (ignoreColumnOrderChanges) {
+                columnPairs.each{SyncPair p -> p.setIgnorableOrderChange(true)}
+            }
+            childPairs.addAll(columnPairs);
+            
             childPairs.addAll(mergeCollections(pair, sourceTable?.getIndexes(), targetTable?.getIndexes(), new MergeKeySupplier<Index>(){
                 
                 def columnsAsText = { columns, included ->
@@ -141,7 +148,13 @@ class ModelComparer extends BeanComparer {
             View targetView = (View)pair.getTarget();
 
             List<SyncPair> childPairs = pair.getChildren()
-            childPairs.addAll(mergeLists(pair, sourceView?.getColumns(),targetView?.getColumns(), namer));
+            
+            def columnPairs = mergeLists(pair, sourceView?.getColumns(),targetView?.getColumns(), namer)
+            if (ignoreColumnOrderChanges) {
+                columnPairs.each{SyncPair p -> p.setIgnorableOrderChange(true)}
+            }
+            childPairs.addAll(columnPairs);
+            
             def attributes = pair.getAttributes()
             attributes.add(new SyncAttributePair("Source", sourceView?.getSource(),
                                                            targetView?.getSource(),
@@ -306,8 +319,8 @@ class ModelSyncSession extends SyncSession {
     // modelService used in applyChanges
     ModelService modelService
 
-    public ModelSyncSession(DbMaster dbm, boolean ignoreWhitespaces) {
-        super(new ModelComparer(ignoreWhitespaces))
+    public ModelSyncSession(DbMaster dbm, boolean ignoreWhitespaces, boolean ignoreColumnOrderChanges) {
+        super(new ModelComparer(ignoreWhitespaces, ignoreColumnOrderChanges))
         setNamer(new ModelNamer())
         this.dbm = dbm
     }
@@ -610,13 +623,11 @@ class ModelSyncSession extends SyncSession {
     }
 }
 
-def p_ignoreWhitespaces = false;
-if (binding.variables["ignoreWhitespaces"]) {
-    p_ignoreWhitespaces = ignoreWhitespaces;
-}
-
 modelService = dbm.getService(ModelService.class)
-sync_session = new ModelSyncSession(dbm, p_ignoreWhitespaces)
+sync_session = new ModelSyncSession(dbm, 
+    binding.variables.containsKey("ignoreWhitespaces")?ignoreWhitespaces:false,
+    binding.variables.containsKey("ignoreColumnOrderChanges")?ignoreColumnOrderChanges:false
+    )
 
 sync_session.setParameter("customFieldMap", binding.variables.get("customFieldMap") == null
     ? Collections.emptyMap()

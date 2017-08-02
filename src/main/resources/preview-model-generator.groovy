@@ -37,16 +37,16 @@ class PreviewGenerator {
         return o==null ? "" : o.getClass().getName()
     }
     
-    private Integer inc(Integer i){
-        return Integer.valueOf(i.intValue()+1);
-    }
-    
     private cleanDefault (String value) {
         if (value==null || value.length()<2 || !(value.startsWith("(")  && value.endsWith(")"))) {
             return escapeHtml(value);
         } else {
             return cleanDefault(value[1..value.length()-2])
         }
+    }
+    
+    private static String getHtmlChangeType(SyncPair pair) {
+        return pair.changeType.name();
     }
     
     private void dumpItem(int level, SyncPair pair) {
@@ -71,11 +71,11 @@ class PreviewGenerator {
                           </tr>""");
 
             childItems.each { child ->
-                if (showChangesOnly && child.changeType==SyncPair.ChangeType.EQUALS && !child.isOrderChanged()) {
+                if (showChangesOnly && child.changeType == ChangeType.EQUALS) {
                    return
                 }
                 sb.append("""<tr>
-                              <td style="background-color:${colors[child.getChangeType().toString()]}">${child.changeType}</td>
+                              <td style="background-color:${colors[getHtmlChangeType(child)]}">${getHtmlChangeType(child)}</td>
                               <td>${child.objectType}</td>
                               <td><a target="_self" href="javascript:void(location.hash='#pair${child.id}')">${child.pairName}</a></td>
                             </tr>""")
@@ -84,17 +84,17 @@ class PreviewGenerator {
 
             sb.append("<h1>Change Details</h1>");
             childItems.each { dbObject ->
-                if (showChangesOnly && dbObject.changeType==SyncPair.ChangeType.EQUALS && !dbObject.isOrderChanged()) {
+                if (showChangesOnly && dbObject.changeType == ChangeType.EQUALS) {
                     return
                 }
                 // sb.append("""<div style="background-color:${colors[dbObject.changeType.toString()]}">""")
-                sb.append("""<div style="background-color:#f1f1f1;padding:15px;margin-bottom:20px;border:5px solid ${colors[dbObject.changeType.toString()]}">""")                
+                sb.append("""<div style="background-color:#f1f1f1;padding:15px;margin-bottom:20px;border:5px solid ${colors[getHtmlChangeType(dbObject)]}">""")                
                 dumpItem(level+1, dbObject)
                 sb.append("</div>")
             }
         } else { // object level
             
-            sb.append("""<h2 id="pair${pair.id}">${pair.objectType} ${pair.pairName} (${pair.changeType.toString().toLowerCase()})</h2>""");
+            sb.append("""<h2 id="pair${pair.id}">${pair.objectType} ${pair.pairName} (${getHtmlChangeType(pair).toLowerCase()})</h2>""");
 
             def attributes = pair.getAttributes()
                .findAll { (!it.attributeName.equals("Source")) && (!showChangesOnly || it.changeType!=SyncAttributePair.AttributeChangeType.EQUALS) }
@@ -154,10 +154,12 @@ class PreviewGenerator {
 
             // Handling columns
             def columnPairs = pair.children.findAll { it.objectType.equals("Column") }
-            if (columnPairs.size()>0) {
+            if (!columnPairs.isEmpty()) {
                 sb.append("<h3>Columns</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
-                if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                
+                boolean changes = pair.changeType==SyncPair.ChangeType.CHANGED;
+                if (changes) {
                     sb.append("<tr><td>Change</td><td>Column Name</td><td>Column Spec</td><td>Source Definition</td></tr>")
                 } else {
                     sb.append("<tr><td>Column Name</td><td>Column Spec</td></tr>")
@@ -181,12 +183,12 @@ class PreviewGenerator {
                 columnPairs.each { p -> 
                     def column = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
-                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                    if (changes) {
                         sb.append("<td style=\"background-color:")
-                        if (p.changeType==SyncPair.ChangeType.EQUALS && p.orderChanged) {
+                        if (p.orderChanged && !p.ignorableOrderChange) {
                             sb.append(colors[SyncPair.ChangeType.CHANGED.toString()]).append("\">MOVED")
                         } else {
-                            sb.append(colors[p.changeType.toString()]).append("\">").append(p.changeType.toString())
+                            sb.append(colors[getHtmlChangeType(p)]).append("\">").append(getHtmlChangeType(p))
                         }
                         if (p.orderChanged) {
                             sb.append(" (")
@@ -198,8 +200,8 @@ class PreviewGenerator {
                     }
                     sb.append("<td>").append(p.pairName).append("</td>")
                     sb.append("""<td>${columnDefinition(column)}</td>""")
-                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
-                        if (p.changeType == SyncPair.ChangeType.CHANGED) {
+                    if (changes) {
+                        if (p.changeType == ChangeType.CHANGED) {
                             sb.append("<td>").append(columnDefinition(p.source)).append("</td>")    
                         } else { 
                             sb.append("<td></td>")
@@ -212,17 +214,27 @@ class PreviewGenerator {
             
             // Handling parameters
             def parameterPairs = pair.children.findAll { it.objectType.equals("Parameter") }
-            if (parameterPairs.size()>0) {
+            if (!parameterPairs.isEmpty()) {
                 sb.append("<h3>Parameters</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
-                if (pair.changeType==SyncPair.ChangeType.CHANGED) {
-                    sb.append("<tr><td>Change</td><td>Parameter name</td><td>Parameter spec</td><td>Source definition</td></tr>")
+                
+                boolean changes = pair.changeType==SyncPair.ChangeType.CHANGED; 
+                if (changes) {
+                    // 4 columns
+                    // change
+                    // name
+                    // definision
+                    // source definition
+                    sb.append("<tr><td>Change</td><td>Parameter name</td><td>Parameter spec</td><td>Source definition</td></tr>") 
                 } else {
-                    sb.append("<tr><td>Parameter name</td><td>Parameter spec</td></tr>")
+                    // 2 columns
+                    // name
+                    // definision
+                    sb.append("<tr><td>Parameter name</td><td>Parameter spec</td></tr>")                                          
                 }
                 
                 // TODO - review this closure
-                def parameterDefinition = { parameter ->
+                def parameterDefinition = {com.branegy.dbmaster.model.Parameter parameter ->
                         parameter.prettyType.toUpperCase() + 
                         (parameter.nullable ? " NULL" : " NOT NULL") +
                         // TODO Add quotes
@@ -233,25 +245,23 @@ class PreviewGenerator {
                     def parameter = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
 
-                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                    if (changes) {
                         sb.append("<td style=\"background-color:")
-                        if (p.changeType==SyncPair.ChangeType.EQUALS && p.orderChanged) {
+                        if (p.orderChanged && !p.ignorableOrderChange) {
                             sb.append(colors[SyncPair.ChangeType.CHANGED.toString()]).append("\">MOVED")
-                        } else {
-                            sb.append(colors[p.changeType.toString()]).append("\">").append(p.changeType.toString())
-                        }
-                        if (p.orderChanged) {
                             sb.append(" (")
                               .append(p.sourceIndex == null ? 999 : p.sourceIndex+1)
                               .append("&nbsp;to&nbsp;")
                               .append(p.targetIndex == null ? 999 : p.targetIndex+1)
                               .append(")")
+                        } else {
+                            sb.append(colors[getHtmlChangeType(p)]).append("\">").append(getHtmlChangeType(p))
                         }
                     }
 
                     sb.append("<td>").append(p.pairName).append("</td>")
                     sb.append("""<td>${parameterDefinition(parameter)}</td>""")
-                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                    if (changes) {
                         if (p.changeType == SyncPair.ChangeType.CHANGED) {
                             sb.append("<td>").append(parameterDefinition(p.source)).append("</td>")    
                         } else { 
@@ -265,10 +275,12 @@ class PreviewGenerator {
 
             // Handle indexes
             def indexPairs = pair.children.findAll { it.objectType.equals("Index") }
-            if (indexPairs.size()>0) {
+            if (!indexPairs.isEmpty()) {
                 sb.append("<h3>Indexes</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
-                if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                
+                boolean changes = pair.changeType==SyncPair.ChangeType.CHANGED;
+                if (changes) {
                     sb.append("<tr><td>Change</td><td>Index Name</td><td>Index Definition</td><td>Source Definition</td></tr>")
                 } else {
                     sb.append("<tr><td>Index Name</td><td>Index Definition</td></tr>")
@@ -309,8 +321,8 @@ class PreviewGenerator {
                 indexPairs.each { p -> 
                     def index = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
-                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
-                        sb.append("""<td style="background-color:${colors[p.changeType.toString()]}">${p.changeType}</td>""")
+                    if (changes) {
+                        sb.append("""<td style="background-color:${colors[getHtmlChangeType(p)]}">${getHtmlChangeType(p)}</td>""")
                     }
                     if (p.changeType==SyncPair.ChangeType.CHANGED && !p.getSourceName().equals(p.getTargetName())) {
                         sb.append("<td>").append(p.getTargetName()).append(" (renamed from ").append(p.getSourceName()).append(")").append("</td>")
@@ -318,7 +330,7 @@ class PreviewGenerator {
                         sb.append("<td>").append(p.pairName).append("</td>")
                     }
                     sb.append("""<td>${indexDefinition(index)}</td>""")
-                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                    if (changes) {
                         if (p.changeType == SyncPair.ChangeType.CHANGED) {
                             sb.append("<td>").append(indexDefinition(p.source)).append("</td>")    
                         } else { 
@@ -332,10 +344,12 @@ class PreviewGenerator {
             
             // Handle constraints
             def constraintPairs = pair.children.findAll { it.objectType.equals("Constraint") }
-            if (constraintPairs.size()>0) {
+            if (!constraintPairs.isEmpty()) {
                 sb.append("<h3>Constraints</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
-                if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                
+                boolean changes = pair.changeType==SyncPair.ChangeType.CHANGED;
+                if (changes) {
                     sb.append("<tr><td>Change</td><td>Constraint Name</td><td>Constraint Definition</td><td>Source Definition</td></tr>")
                 } else {
                     sb.append("<tr><td>Constraint Name</td><td>Constraint Definition</td></tr>")
@@ -352,12 +366,12 @@ class PreviewGenerator {
                 constraintPairs.each { p -> 
                     def constraint = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
-                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
-                        sb.append("""<td style="background-color:${colors[p.changeType.toString()]}">${p.changeType}</td>""")
+                    if (changes) {
+                        sb.append("""<td style="background-color:${colors[getHtmlChangeType(p)]}">${getHtmlChangeType(p)}</td>""")
                     }
                     sb.append("<td>").append(p.pairName).append("</td>")
                     sb.append("""<td>${constraintDefinition(constraint)}</td>""")
-                    if (pair.changeType==SyncPair.ChangeType.CHANGED) {
+                    if (changes) {
                         if (p.changeType == SyncPair.ChangeType.CHANGED) {
                             sb.append("<td>").append(constraintDefinition(p.source)).append("</td>")    
                         } else { 
@@ -411,7 +425,7 @@ class PreviewGenerator {
             }
             
             def childItems = pair.getChildren().each { child ->
-                if (showChangesOnly && child.getChangeType()==SyncPair.ChangeType.EQUALS && !child.isOrderChanged()) {
+                if (showChangesOnly && child.changeType == ChangeType.EQUALS) {
                     return
                 }
                 if (!child.objectType.equals("Column") && !child.objectType.equals("Index") 
