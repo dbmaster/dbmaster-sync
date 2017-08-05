@@ -151,15 +151,17 @@ class PreviewGenerator {
                 }
                 sb.append("</table>");
             }
+            
+            def сhildrenChanges;
 
             // Handling columns
-            def columnPairs = pair.children.findAll { it.objectType.equals("Column") }
+            сhildrenChanges = false;
+            def columnPairs = pair.children.findAll { def result = it.objectType.equals("Column"); сhildrenChanges |= result && it.changeType == ChangeType.CHANGED; return result}
             if (!columnPairs.isEmpty()) {
                 sb.append("<h3>Columns</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
                 
-                boolean changes = pair.changeType==SyncPair.ChangeType.CHANGED;
-                if (changes) {
+                if (сhildrenChanges) {
                     sb.append("<tr><td>Change</td><td>Column Name</td><td>Column Spec</td><td>Source Definition</td></tr>")
                 } else {
                     sb.append("<tr><td>Column Name</td><td>Column Spec</td></tr>")
@@ -183,24 +185,33 @@ class PreviewGenerator {
                 columnPairs.each { p -> 
                     def column = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
-                    if (changes) {
+                    if (сhildrenChanges) {
                         sb.append("<td style=\"background-color:")
-                        if (p.orderChanged && !p.ignorableOrderChange) {
-                            sb.append(colors[SyncPair.ChangeType.CHANGED.toString()]).append("\">MOVED")
-                        } else {
-                            sb.append(colors[getHtmlChangeType(p)]).append("\">").append(getHtmlChangeType(p))
-                        }
                         if (p.orderChanged) {
+                            if (p.changeType == ChangeType.EQUALS) { // if ignored only 
+                                sb.append(colors[SyncPair.ChangeType.CHANGED.toString()])
+                                  .append("\">MOVED")
+                            } else {
+                                sb.append(colors[getHtmlChangeType(p)])
+                                  .append("\">")
+                                  .append(getHtmlChangeType(p))
+                                  .append(" MOVED")
+                            }
                             sb.append(" (")
                               .append(p.sourceIndex == null ? 999 : p.sourceIndex+1)
                               .append("&nbsp;to&nbsp;")
                               .append(p.targetIndex == null ? 999 : p.targetIndex+1)
-                              .append(")")
+                              .append(")");
+                            if (p.ignorableOrderChange) {
+                                sb.append(" &amp; ignored");
+                            }  
+                        } else {
+                            sb.append(colors[getHtmlChangeType(p)]).append("\">").append(getHtmlChangeType(p))
                         }
                     }
                     sb.append("<td>").append(p.pairName).append("</td>")
                     sb.append("""<td>${columnDefinition(column)}</td>""")
-                    if (changes) {
+                    if (сhildrenChanges) {
                         if (p.changeType == ChangeType.CHANGED) {
                             sb.append("<td>").append(columnDefinition(p.source)).append("</td>")    
                         } else { 
@@ -213,13 +224,13 @@ class PreviewGenerator {
             }
             
             // Handling parameters
-            def parameterPairs = pair.children.findAll { it.objectType.equals("Parameter") }
+            сhildrenChanges = false;
+            def parameterPairs = pair.children.findAll{ def result = it.objectType.equals("Parameter"); сhildrenChanges |= result && it.changeType == ChangeType.CHANGED; return result}
             if (!parameterPairs.isEmpty()) {
                 sb.append("<h3>Parameters</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
                 
-                boolean changes = pair.changeType==SyncPair.ChangeType.CHANGED; 
-                if (changes) {
+                if (сhildrenChanges) {
                     // 4 columns
                     // change
                     // name
@@ -245,7 +256,7 @@ class PreviewGenerator {
                     def parameter = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
 
-                    if (changes) {
+                    if (сhildrenChanges) {
                         sb.append("<td style=\"background-color:")
                         if (p.orderChanged && !p.ignorableOrderChange) {
                             sb.append(colors[SyncPair.ChangeType.CHANGED.toString()]).append("\">MOVED")
@@ -261,7 +272,7 @@ class PreviewGenerator {
 
                     sb.append("<td>").append(p.pairName).append("</td>")
                     sb.append("""<td>${parameterDefinition(parameter)}</td>""")
-                    if (changes) {
+                    if (сhildrenChanges) {
                         if (p.changeType == SyncPair.ChangeType.CHANGED) {
                             sb.append("<td>").append(parameterDefinition(p.source)).append("</td>")    
                         } else { 
@@ -274,13 +285,13 @@ class PreviewGenerator {
             }            
 
             // Handle indexes
-            def indexPairs = pair.children.findAll { it.objectType.equals("Index") }
+            сhildrenChanges = false;
+            def indexPairs = pair.children.findAll { def result = it.objectType.equals("Index"); сhildrenChanges |= result && it.changeType == ChangeType.CHANGED; return result}
             if (!indexPairs.isEmpty()) {
                 sb.append("<h3>Indexes</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
                 
-                boolean changes = pair.changeType==SyncPair.ChangeType.CHANGED;
-                if (changes) {
+                if (сhildrenChanges) {
                     sb.append("<tr><td>Change</td><td>Index Name</td><td>Index Definition</td><td>Source Definition</td></tr>")
                 } else {
                     sb.append("<tr><td>Index Name</td><td>Index Definition</td></tr>")
@@ -321,17 +332,33 @@ class PreviewGenerator {
                 indexPairs.each { p -> 
                     def index = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
-                    if (changes) {
-                        sb.append("""<td style="background-color:${colors[getHtmlChangeType(p)]}">${getHtmlChangeType(p)}</td>""")
+                    if (сhildrenChanges) {
+                        sb.append("<td style=\"background-color:");
+                        if (p.hasNameChange()) {
+                            if (!p.attributeChanges && !p.childrenChanges) {
+                                sb.append(colors[SyncPair.ChangeType.CHANGED]);
+                                sb.append("\">");
+                                sb.append("RENAMED");
+                            } else {
+                                sb.append(colors[getHtmlChangeType(p)]);
+                                sb.append("\">");
+                                sb.append(getHtmlChangeType(p));
+                            }
+                        } else {
+                            sb.append(colors[getHtmlChangeType(p)]);
+                            sb.append("\">");
+                            sb.append(getHtmlChangeType(p));
+                        }
+                        sb.append("</td>");
                     }
-                    if (p.changeType==SyncPair.ChangeType.CHANGED && !p.getSourceName().equals(p.getTargetName())) {
+                    if (p.hasNameChange()) {
                         sb.append("<td>").append(p.getTargetName()).append(" (renamed from ").append(p.getSourceName()).append(")").append("</td>")
                     } else {
                         sb.append("<td>").append(p.pairName).append("</td>")
                     }
                     sb.append("""<td>${indexDefinition(index)}</td>""")
-                    if (changes) {
-                        if (p.changeType == SyncPair.ChangeType.CHANGED) {
+                    if (сhildrenChanges) {
+                        if (p.changeType == SyncPair.ChangeType.CHANGED && (p.attributeChanges || p.childrenChanges)) {
                             sb.append("<td>").append(indexDefinition(p.source)).append("</td>")    
                         } else { 
                             sb.append("<td></td>")
@@ -343,13 +370,13 @@ class PreviewGenerator {
             }
             
             // Handle constraints
-            def constraintPairs = pair.children.findAll { it.objectType.equals("Constraint") }
+            сhildrenChanges = false;
+            def constraintPairs = pair.children.findAll { def result = it.objectType.equals("Constraint"); сhildrenChanges |= result && it.changeType == ChangeType.CHANGED; return result}
             if (!constraintPairs.isEmpty()) {
                 sb.append("<h3>Constraints</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
                 
-                boolean changes = pair.changeType==SyncPair.ChangeType.CHANGED;
-                if (changes) {
+                if (сhildrenChanges) {
                     sb.append("<tr><td>Change</td><td>Constraint Name</td><td>Constraint Definition</td><td>Source Definition</td></tr>")
                 } else {
                     sb.append("<tr><td>Constraint Name</td><td>Constraint Definition</td></tr>")
@@ -366,13 +393,33 @@ class PreviewGenerator {
                 constraintPairs.each { p -> 
                     def constraint = (p.changeType == SyncPair.ChangeType.DELETED) ? p.source : p.target
                     sb.append("<tr>")
-                    if (changes) {
-                        sb.append("""<td style="background-color:${colors[getHtmlChangeType(p)]}">${getHtmlChangeType(p)}</td>""")
+                    if (сhildrenChanges) {
+                        sb.append("<td style=\"background-color:");
+                        if (p.hasNameChange()) {
+                            if (!p.attributeChanges && !p.childrenChanges) {
+                                sb.append(colors[SyncPair.ChangeType.CHANGED]);
+                                sb.append("\">");
+                                sb.append("RENAMED");
+                            } else {
+                                sb.append(colors[getHtmlChangeType(p)]);
+                                sb.append("\">");
+                                sb.append(getHtmlChangeType(p));
+                            }
+                        } else {
+                            sb.append(colors[getHtmlChangeType(p)]);
+                            sb.append("\">");
+                            sb.append(getHtmlChangeType(p));
+                        }
+                        sb.append("</td>");
                     }
-                    sb.append("<td>").append(p.pairName).append("</td>")
+                    if (p.hasNameChange()) {
+                        sb.append("<td>").append(p.getTargetName()).append(" (renamed from ").append(p.getSourceName()).append(")").append("</td>")
+                    } else {
+                        sb.append("<td>").append(p.pairName).append("</td>")
+                    }
                     sb.append("""<td>${constraintDefinition(constraint)}</td>""")
-                    if (changes) {
-                        if (p.changeType == SyncPair.ChangeType.CHANGED) {
+                    if (сhildrenChanges) {
+                        if (p.changeType == SyncPair.ChangeType.CHANGED && (p.attributeChanges || p.childrenChanges)) {
                             sb.append("<td>").append(constraintDefinition(p.source)).append("</td>")    
                         } else { 
                             sb.append("<td></td>")

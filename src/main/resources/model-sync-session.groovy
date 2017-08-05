@@ -126,14 +126,20 @@ class ModelComparer extends BeanComparer {
                     return result
                 }
                 
-                public String getKey(Index o) {
-                    return indexDefinition(o);
+                public String getKey(Index index) {
+                    return indexDefinition(index);
+                }
+                public String getName(Index index) {
+                    return index.getName();
                 }
             }));
            
 
             if (exludeObjects==null || !exludeObjects.contains("Constraints")) {
                 childPairs.addAll(mergeCollections(pair, sourceTable?.getConstraints(), targetTable?.getConstraints(), new MergeKeySupplier<Constraint>(){
+                    public String getName(Constraint o) {
+                        return o.getName();
+                    }
                     public String getKey(Constraint o) {
                         return o.getDefinition();
                     }
@@ -226,10 +232,6 @@ targetParameter?.getDefaultValue()))
             Index sourceIndex = (Index)pair.getSource();
             Index targetIndex = (Index)pair.getTarget();
             
-            if (pair.getChangeType() == ChangeType.EQUALS && !sourceIndex.getName().equals(targetIndex.getName())) {
-                pair.setChangeType(ChangeType.CHANGED);
-            }
-        
             def attributes = pair.getAttributes()
             def columnsAsText = { columns, included ->
                 String result = null
@@ -264,10 +266,6 @@ targetParameter?.getDefaultValue()))
             Constraint sourceConstraint = (Constraint)pair.getSource();
             Constraint targetConstraint = (Constraint)pair.getTarget();
             
-            if (pair.getChangeType() == ChangeType.EQUALS && !sourceConstraint.getName().equals(targetConstraint.getName())) {
-                pair.setChangeType(ChangeType.CHANGED);
-            }
-
             def attributes = pair.getAttributes()
             attributes.add(new SyncAttributePair("Definition", sourceConstraint?.getDefinition(),
                                                                targetConstraint?.getDefinition()))
