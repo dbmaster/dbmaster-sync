@@ -54,10 +54,14 @@ class ModelComparer extends BeanComparer {
     Model    target
     final SyncAttributeComparator<?> sourceComparator;
     final boolean ignoreColumnOrderChanges;
+    final boolean ignoreRenamedCKs;
+    final boolean ignoreRenamedIndexes;
     
-    public ModelComparer(boolean ignoreWhitespaces, boolean ignoreColumnOrderChanges) {
+    public ModelComparer(boolean ignoreWhitespaces, boolean ignoreColumnOrderChanges,boolean ignoreRenamedCKs, boolean ignoreRenamedIndexes) {
         sourceComparator = ignoreWhitespaces?SyncAttributeComparators.IGNORE_WHITESPACES:SyncAttributeComparators.DEFAULT;
         this.ignoreColumnOrderChanges = ignoreColumnOrderChanges;
+        this.ignoreRenamedCKs = ignoreRenamedCKs;
+        this.ignoreRenamedIndexes = ignoreRenamedIndexes;
     }
     
     private cleanDefault (String value) {
@@ -92,8 +96,7 @@ class ModelComparer extends BeanComparer {
             }
             childPairs.addAll(columnPairs);
             
-            childPairs.addAll(mergeCollections(pair, sourceTable?.getIndexes(), targetTable?.getIndexes(), new MergeKeySupplier<Index>(){
-                
+            def indexesCollection = mergeCollections(pair, sourceTable?.getIndexes(), targetTable?.getIndexes(), new MergeKeySupplier<Index>(){
                 def columnsAsText = { columns, included ->
                     String result = null
                     if (columns!=null) {
@@ -104,7 +107,7 @@ class ModelComparer extends BeanComparer {
                     }
                     return result
                 }
-        
+    
                 def indexDefinition = {Index index ->
                     String result=""
                     if (index.primaryKey) {
@@ -113,37 +116,45 @@ class ModelComparer extends BeanComparer {
                     if (!index.primaryKey) {
                         result+=" "+(index.unique ? "UNIQUE":"")
                     }
-
+    
                     result +=" "+index.type.toString().toUpperCase();
                     result +=  " (" + columnsAsText(index?.getColumns(),false) + ")"
                     String included = columnsAsText(index?.getColumns(),true)
                     if (included!=null) {
-                           result += " INCLUDE ("+included+")"
+                        result += " INCLUDE ("+included+")"
                     }
                     if (index.disabled) {
-                            result += " DISABLED"
+                        result += " DISABLED"
                     }
                     return result
                 }
-                
+    
                 public String getKey(Index index) {
                     return indexDefinition(index);
                 }
                 public String getName(Index index) {
                     return index.getName();
                 }
-            }));
+            })
+            childPairs.addAll(indexesCollection);
+            if (ignoreRenamedIndexes) {
+                indexesCollection.each {SyncPair p -> p.setIgnorableNameChange(true)};
+            }
            
 
             if (exludeObjects==null || !exludeObjects.contains("Constraints")) {
-                childPairs.addAll(mergeCollections(pair, sourceTable?.getConstraints(), targetTable?.getConstraints(), new MergeKeySupplier<Constraint>(){
+                def contraintsCollection = mergeCollections(pair, sourceTable?.getConstraints(), targetTable?.getConstraints(), new MergeKeySupplier<Constraint>(){
                     public String getName(Constraint o) {
                         return o.getName();
                     }
                     public String getKey(Constraint o) {
                         return o.getDefinition();
                     }
-                }));
+                })
+                if (ignoreRenamedCKs) {
+                    contraintsCollection.each {SyncPair p -> p.setIgnorableNameChange(true)};
+                }
+                childPairs.addAll(contraintsCollection);
             }
             
             if (exludeObjects==null || !exludeObjects.contains("Triggers")) {
@@ -317,8 +328,9 @@ class ModelSyncSession extends SyncSession {
     // modelService used in applyChanges
     ModelService modelService
 
-    public ModelSyncSession(DbMaster dbm, boolean ignoreWhitespaces, boolean ignoreColumnOrderChanges) {
-        super(new ModelComparer(ignoreWhitespaces, ignoreColumnOrderChanges))
+    public ModelSyncSession(DbMaster dbm, boolean ignoreWhitespaces, boolean ignoreColumnOrderChanges,
+        boolean ignoreRenamedCKs, boolean ignoreRenamedIndexes) {
+        super(new ModelComparer(ignoreWhitespaces, ignoreColumnOrderChanges,ignoreRenamedCKs,ignoreRenamedIndexes))
         setNamer(new ModelNamer())
         this.dbm = dbm
     }
@@ -624,7 +636,9 @@ class ModelSyncSession extends SyncSession {
 modelService = dbm.getService(ModelService.class)
 sync_session = new ModelSyncSession(dbm, 
     binding.variables.containsKey("ignoreWhitespaces")?ignoreWhitespaces:false,
-    binding.variables.containsKey("ignoreColumnOrderChanges")?ignoreColumnOrderChanges:false
+    binding.variables.containsKey("ignoreColumnOrderChanges")?ignoreColumnOrderChanges:false,
+    binding.variables.containsKey("ignoreRenamedCKs")?ignoreRenamedCKs:false,
+    binding.variables.containsKey("ignoreRenamedIndexes")?ignoreRenamedIndexes:false
     )
 
 sync_session.setParameter("customFieldMap", binding.variables.get("customFieldMap") == null

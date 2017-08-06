@@ -286,7 +286,7 @@ class PreviewGenerator {
 
             // Handle indexes
             сhildrenChanges = false;
-            def indexPairs = pair.children.findAll { def result = it.objectType.equals("Index"); сhildrenChanges |= result && it.changeType == ChangeType.CHANGED; return result}
+            def indexPairs = pair.children.findAll { def result = it.objectType.equals("Index"); сhildrenChanges |= result && it.changeType != ChangeType.EQUALS; return result}
             if (!indexPairs.isEmpty()) {
                 sb.append("<h3>Indexes</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
@@ -334,11 +334,17 @@ class PreviewGenerator {
                     sb.append("<tr>")
                     if (сhildrenChanges) {
                         sb.append("<td style=\"background-color:");
-                        if (p.hasNameChange()) {
+                        if (p.isNameChange()) {
                             if (!p.attributeChanges && !p.childrenChanges) {
-                                sb.append(colors[SyncPair.ChangeType.CHANGED]);
-                                sb.append("\">");
-                                sb.append("RENAMED");
+                                if (p.ignorableNameChange) {
+                                    sb.append(colors[SyncPair.ChangeType.EQUALS.toString()]);
+                                    sb.append("\">");
+                                    sb.append("RENAMED &amp; ignored");
+                                } else {
+                                    sb.append(colors[SyncPair.ChangeType.CHANGED.toString()]);
+                                    sb.append("\">");
+                                    sb.append("RENAMED");
+                                }
                             } else {
                                 sb.append(colors[getHtmlChangeType(p)]);
                                 sb.append("\">");
@@ -351,7 +357,7 @@ class PreviewGenerator {
                         }
                         sb.append("</td>");
                     }
-                    if (p.hasNameChange()) {
+                    if (p.isNameChange()) {
                         sb.append("<td>").append(p.getTargetName()).append(" (renamed from ").append(p.getSourceName()).append(")").append("</td>")
                     } else {
                         sb.append("<td>").append(p.pairName).append("</td>")
@@ -371,7 +377,7 @@ class PreviewGenerator {
             
             // Handle constraints
             сhildrenChanges = false;
-            def constraintPairs = pair.children.findAll { def result = it.objectType.equals("Constraint"); сhildrenChanges |= result && it.changeType == ChangeType.CHANGED; return result}
+            def constraintPairs = pair.children.findAll { def result = it.objectType.equals("Constraint"); сhildrenChanges |= result && it.changeType != ChangeType.EQUALS; return result}
             if (!constraintPairs.isEmpty()) {
                 sb.append("<h3>Constraints</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
@@ -395,11 +401,17 @@ class PreviewGenerator {
                     sb.append("<tr>")
                     if (сhildrenChanges) {
                         sb.append("<td style=\"background-color:");
-                        if (p.hasNameChange()) {
+                        if (p.isNameChange()) {
                             if (!p.attributeChanges && !p.childrenChanges) {
-                                sb.append(colors[SyncPair.ChangeType.CHANGED]);
-                                sb.append("\">");
-                                sb.append("RENAMED");
+                                if (p.ignorableNameChange) {
+                                    sb.append(colors[SyncPair.ChangeType.EQUALS.toString()]);
+                                    sb.append("\">");
+                                    sb.append("RENAMED &amp; ignored");
+                                } else {
+                                    sb.append(colors[SyncPair.ChangeType.CHANGED.toString()]);
+                                    sb.append("\">");
+                                    sb.append("RENAMED");
+                                }
                             } else {
                                 sb.append(colors[getHtmlChangeType(p)]);
                                 sb.append("\">");
@@ -412,7 +424,7 @@ class PreviewGenerator {
                         }
                         sb.append("</td>");
                     }
-                    if (p.hasNameChange()) {
+                    if (p.isNameChange()) {
                         sb.append("<td>").append(p.getTargetName()).append(" (renamed from ").append(p.getSourceName()).append(")").append("</td>")
                     } else {
                         sb.append("<td>").append(p.pairName).append("</td>")
