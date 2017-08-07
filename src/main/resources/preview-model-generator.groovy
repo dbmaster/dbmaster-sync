@@ -155,8 +155,8 @@ class PreviewGenerator {
             def сhildrenChanges;
 
             // Handling columns
-            сhildrenChanges = false;
-            def columnPairs = pair.children.findAll { def result = it.objectType.equals("Column"); сhildrenChanges |= result && it.changeType == ChangeType.CHANGED; return result}
+            сhildrenChanges = pair.changeType != ChangeType.NEW && pair.changeType != ChangeType.DELETED;
+            def columnPairs = pair.children.findAll { def result = it.objectType.equals("Column"); /*сhildrenChanges |= result && it.changeType == ChangeType.CHANGED;*/ return result}
             if (!columnPairs.isEmpty()) {
                 sb.append("<h3>Columns</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
@@ -224,8 +224,8 @@ class PreviewGenerator {
             }
             
             // Handling parameters
-            сhildrenChanges = false;
-            def parameterPairs = pair.children.findAll{ def result = it.objectType.equals("Parameter"); сhildrenChanges |= result && it.changeType == ChangeType.CHANGED; return result}
+            сhildrenChanges = pair.changeType != ChangeType.NEW && pair.changeType != ChangeType.DELETED;
+            def parameterPairs = pair.children.findAll{ def result = it.objectType.equals("Parameter"); /*сhildrenChanges |= result && it.changeType == ChangeType.CHANGED;*/ return result}
             if (!parameterPairs.isEmpty()) {
                 sb.append("<h3>Parameters</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
@@ -285,8 +285,8 @@ class PreviewGenerator {
             }            
 
             // Handle indexes
-            сhildrenChanges = false;
-            def indexPairs = pair.children.findAll { def result = it.objectType.equals("Index"); сhildrenChanges |= result && it.changeType != ChangeType.EQUALS; return result}
+            сhildrenChanges = pair.changeType != ChangeType.NEW && pair.changeType != ChangeType.DELETED;
+            def indexPairs = pair.children.findAll { def result = it.objectType.equals("Index"); /*сhildrenChanges |= result && (it.changeType != ChangeType.EQUALS || it.isNameChange());*/ return result}
             if (!indexPairs.isEmpty()) {
                 sb.append("<h3>Indexes</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
@@ -376,8 +376,8 @@ class PreviewGenerator {
             }
             
             // Handle constraints
-            сhildrenChanges = false;
-            def constraintPairs = pair.children.findAll { def result = it.objectType.equals("Constraint"); сhildrenChanges |= result && it.changeType != ChangeType.EQUALS; return result}
+            сhildrenChanges = pair.changeType != ChangeType.NEW && pair.changeType != ChangeType.DELETED;
+            def constraintPairs = pair.children.findAll { def result = it.objectType.equals("Constraint"); /*сhildrenChanges |= result && (it.changeType != ChangeType.EQUALS || it.isNameChange());*/ return result}
             if (!constraintPairs.isEmpty()) {
                 sb.append("<h3>Constraints</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
@@ -484,9 +484,9 @@ class PreviewGenerator {
             }
             
             def childItems = pair.getChildren().each { child ->
-                if (showChangesOnly && child.changeType == ChangeType.EQUALS) {
-                    return
-                }
+//                if (showChangesOnly && child.changeType == ChangeType.EQUALS) {
+//                    return
+//                }
                 if (!child.objectType.equals("Column") && !child.objectType.equals("Index") 
                  && !child.objectType.equals("Constraint") && !child.objectType.equals("Parameter")) {
                     dumpItem(level+1, child)
