@@ -4,8 +4,10 @@ import java.util.Collections
 
 import static org.apache.commons.lang.StringEscapeUtils.escapeHtml
 
+import com.branegy.dbmaster.model.ForeignKey;
+import com.branegy.dbmaster.model.ForeignKey.ColumnMapping;
 import com.branegy.dbmaster.sync.api.*
-import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
+import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
 
 class PreviewGenerator {
     def colors = [
@@ -286,7 +288,7 @@ class PreviewGenerator {
 
             // Handle indexes
             сhildrenChanges = pair.changeType != ChangeType.NEW && pair.changeType != ChangeType.DELETED;
-            def indexPairs = pair.children.findAll { def result = it.objectType.equals("Index"); /*сhildrenChanges |= result && (it.changeType != ChangeType.EQUALS || it.isNameChange());*/ return result}
+            def indexPairs = pair.children.findAll { def result = it.objectType.equals("Index");return result}
             if (!indexPairs.isEmpty()) {
                 sb.append("<h3>Indexes</h3>")
                 sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
@@ -441,6 +443,43 @@ class PreviewGenerator {
                 }
                 sb.append("</table>")
             }
+            
+            // Handle ColumnMapping
+            сhildrenChanges = pair.changeType != ChangeType.NEW && pair.changeType != ChangeType.DELETED;
+            def columnMappingPairs = pair.children.findAll { def result = it.objectType.equals("ColumnMapping"); return result}
+            if (!columnMappingPairs.isEmpty()) {
+                sb.append("<h3>FK Columns</h3>")
+                sb.append("""<table cellspacing="0" class="simple-table" style="width:100%">""")
+                sb.append("<tr><td>Change</td><td>Source FK Columns</td><td>Target FK Columns</td></tr>")
+                
+                def columnMappingToString = { ForeignKey fk, ColumnMapping cm ->
+                    if (cm == null) {
+                        return "";
+                    }
+                    return cm.sourceColumnName + " &rarr; " + fk.getTargetTable()+"."+cm.targetColumnName;
+                };
+                
+                columnMappingPairs.each { p -> 
+                    sb.append("<tr>")
+                    sb.append("<td style=\"background-color:");
+                    sb.append(colors[getHtmlChangeType(p)]);
+                    sb.append("\">");
+                    sb.append(getHtmlChangeType(p));
+                    sb.append("</td>");
+                    
+                    ColumnMapping sourceMapping = p.getSource();
+                    ColumnMapping targetMapping = p.getTarget();
+                    
+                    sb.append("<td>");
+                    sb.append(sourceMapping!=null?columnMappingToString(pair.getSource(), sourceMapping):"");
+                    sb.append("</td>");
+                    sb.append("<td>");
+                    sb.append(targetMapping!=null?columnMappingToString(pair.getTarget(), targetMapping):"");
+                    sb.append("</td>");
+                    // TODO add rename + index changes
+                }
+                sb.append("</table>")
+            }
 
             // Handling object source code
             def sourceAttr = pair.attributes.find { it.attributeName.equals("Source") }
@@ -488,7 +527,8 @@ class PreviewGenerator {
 //                    return
 //                }
                 if (!child.objectType.equals("Column") && !child.objectType.equals("Index") 
-                 && !child.objectType.equals("Constraint") && !child.objectType.equals("Parameter")) {
+                 && !child.objectType.equals("Constraint") && !child.objectType.equals("Parameter")
+                 && !child.objectType.equals("ColumnMapping")) {
                     dumpItem(level+1, child)
                 }
             }

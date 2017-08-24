@@ -19,12 +19,16 @@ import com.branegy.dbmaster.sync.api.SyncAttributePair.SyncAttributeComparator;
 import com.branegy.dbmaster.sync.api.SyncSession.SearchTarget
 import com.branegy.dbmaster.sync.api.SyncService
 import com.branegy.dbmaster.model.*
+import com.branegy.dbmaster.model.ForeignKey.ColumnMapping;
 
 class ModelNamer implements Namer {
     @Override
     public String getName(Object o) {
         if (o instanceof DatabaseObject<?>) {
             return ((DatabaseObject<?>)o).getName();
+        } else if (o instanceof ColumnMapping) {
+            ColumnMapping cm = (ColumnMapping)o;
+            return o.sourceColumnName+"/"+cm.targetColumnName;
         } else {
             throw new IllegalArgumentException("Unexpected object class "+o);
         }
@@ -32,17 +36,18 @@ class ModelNamer implements Namer {
 
     @Override
     public String getType(Object o) {
-        if (o instanceof Model)             {  return "Model"
-        } else if (o instanceof Table)      {  return "Table"
-        } else if (o instanceof View)       {  return "View"
-        } else if (o instanceof Procedure)  {  return "Procedure"
-        } else if (o instanceof Function)   {  return "Function"
-        } else if (o instanceof Parameter)  {  return "Parameter"
-        } else if (o instanceof Column)     {  return "Column"
-        } else if (o instanceof Index)      {  return "Index"
-        } else if (o instanceof Constraint) {  return "Constraint"
-        } else if (o instanceof ForeignKey) {  return "ForeignKey"
-        } else if (o instanceof Trigger)    {  return "Trigger"
+        if (o instanceof Model)               {  return "Model"
+        } else if (o instanceof Table)        {  return "Table"
+        } else if (o instanceof View)         {  return "View"
+        } else if (o instanceof Procedure)    {  return "Procedure"
+        } else if (o instanceof Function)     {  return "Function"
+        } else if (o instanceof Parameter)    {  return "Parameter"
+        } else if (o instanceof Column)       {  return "Column"
+        } else if (o instanceof Index)        {  return "Index"
+        } else if (o instanceof Constraint)   {  return "Constraint"
+        } else if (o instanceof ForeignKey)   {  return "ForeignKey"
+        } else if (o instanceof Trigger)      {  return "Trigger"
+        } else if (o instanceof ColumnMapping){  return "ColumnMapping"
         } else {
             throw new IllegalArgumentException("Unexpected object class "+o);
         }
@@ -141,7 +146,6 @@ class ModelComparer extends BeanComparer {
                 indexesCollection.each {SyncPair p -> p.setIgnorableNameChange(true)};
             }
            
-
             if (exludeObjects==null || !exludeObjects.contains("Constraints")) {
                 def contraintsCollection = mergeCollections(pair, sourceTable?.getConstraints(), targetTable?.getConstraints(), new MergeKeySupplier<Constraint>(){
                     public String getName(Constraint o) {
@@ -159,6 +163,45 @@ class ModelComparer extends BeanComparer {
             
             if (exludeObjects==null || !exludeObjects.contains("Triggers")) {
                 childPairs.addAll(mergeCollections(pair, sourceTable?.getTriggers(), targetTable?.getTriggers(), namer));
+            }
+            
+            if (exludeObjects==null || !exludeObjects.contains("ForeignKeys")) {
+                // TODO add rename owner table
+                childPairs.addAll(mergeCollections(pair, sourceTable?.getForeignKeys(), targetTable?.getForeignKeys(), new MergeKeySupplier<ForeignKey>() {
+                    final StringBuilder builder = new StringBuilder(1024);
+                    final List<ColumnMapping> columns;
+                    
+                    public String getName(ForeignKey o) {
+                        return o.getName();
+                    }
+                    public String getKey(ForeignKey o) {
+                        builder.setLength(0);
+                        builder.append(o.getTargetTable().toLowerCase());
+                        builder.append(0);
+                        builder.append(o.getUpdateAction());
+                        builder.append(0);
+                        builder.append(o.getDeleteAction());
+                        builder.append(0);
+                        List<ColumnMapping> columns = o.getColumns();
+                        if (columns.size() == 1) {
+                            builder.append(columns.get(0).getSourceColumnName().toLowerCase());
+                            builder.append(0);
+                            builder.append(columns.get(0).getTargetColumnName().toLowerCase());
+                        } else {
+                            this.columns.clear();
+                            this.columns.addAll(columns);
+                            Collections.sort(this.columns,
+                                 {ColumnMapping a, ColumnMapping b -> a.getSourceColumnName()?.toLowerCase() <=> b.getSourceColumnName()?.toLowerCase()});
+                            for (ColumnMapping cm:this.columns) {
+                                builder.append(cm.getSourceColumnName().toLowerCase());
+                                builder.append(0);
+                                builder.append(cm.getTargetColumnName().toLowerCase());
+                                builder.append(0);
+                            }
+                        }
+                        return builder.toString();
+                    }
+                }));
             }
         } else if (objectType.equals("View")) {
             View sourceView = (View)pair.getSource();
@@ -283,9 +326,35 @@ targetParameter?.getDefaultValue()))
             attributes.add(new SyncAttributePair("Disabled", sourceConstraint?.isDisabled(),
                                                              targetConstraint?.isDisabled()))
 
-        
         } else if (objectType.equals("ForeignKey")) {
-            // TODO Compare FKs
+            ForeignKey sourceFK = (ForeignKey)pair.getSource();
+            ForeignKey targetFK = (ForeignKey)pair.getTarget();
+            
+            pair.getChildren().addAll(mergeLists(pair, sourceFK?.getColumns(), targetFK?.getColumns(), new Namer() {
+                public String getName(Object o) {
+                    if (o instanceof ColumnMapping) {
+                        return o.sourceColumnName?.toLowerCase()+"/"+o.targetColumnName?.toLowerCase();
+                    } 
+                    throw new IllegalArgumentException("Unexpected object class "+o);
+                }
+                public String getType(Object paramObject) {
+                    if (o instanceof ColumnMapping) {
+                        return "ColumnMapping";
+                    }
+                    throw new IllegalArgumentException("Unexpected object class "+o);
+                }
+            }));
+            
+            def attributes = pair.getAttributes()
+            attributes.add(new SyncAttributePair("Disabled",        sourceFK?.isDisabled(),
+                                                                    targetFK?.isDisabled()));
+            attributes.add(new SyncAttributePair("Delete Action",   sourceFK?.getDeleteAction(),
+                                                                    targetFK?.getDeleteAction()));
+            attributes.add(new SyncAttributePair("Update Action",   sourceFK?.getUpdateAction(),
+                                                                    targetFK?.getUpdateAction()));
+            attributes.add(new SyncAttributePair("Target Table",    sourceFK?.getTargetTable(),
+                                                                    targetFK?.getTargetTable()));
+        } else if (objectType.equals("ColumnMapping")) {
         } else if (objectType.equals("Trigger")) {
             Trigger sourceTrigger = (Trigger)pair.getSource();
             Trigger targetTrigger = (Trigger)pair.getTarget();
@@ -297,7 +366,6 @@ targetParameter?.getDefaultValue()))
             attributes.add(new SyncAttributePair("Source",     sourceTrigger?.getSource(),
                                                                targetTrigger?.getSource(),
                                                                sourceComparator));
-          
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
         }
@@ -627,6 +695,7 @@ class ModelSyncSession extends SyncSession {
                     default:
                         throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
                 }
+        } else if (objectType.equals("ColumnMapping")) {
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
         }
