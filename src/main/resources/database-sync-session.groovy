@@ -101,6 +101,7 @@ class InventoryComparer extends BeanComparer {
                     Connector connector = ConnectionProvider.getConnector(targetServer)
                     dialect = connector.connect()
                     targetDatabases = dialect.getDatabases()
+                    pair.setCaseSensitive(dialect.isCaseSensitive());
                 }
                 childPairs.addAll(mergeCollections(pair, sourceDatabases,targetDatabases, namer));
             } catch (Exception e) {

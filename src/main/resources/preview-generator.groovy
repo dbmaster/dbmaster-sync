@@ -61,10 +61,10 @@ class PreviewGenerator{
         while (!queue.isEmpty()){
             SyncPair p = queue.removeFirst();
             printScreen(p);
-            if (p.hasChildren()){
+            if (p.isChildren()){
                 p.getChildren().sort{syncPairSorter};
                 for (SyncPair p2:p.getChildren()){
-                   if (p2.hasChildrenChanges() || p2.hasAttributeChanges()){
+                   if (p2.isChildrenChanges() || p2.isAttributeChanges()){
                        queue.addLast(p2);
                    } 
                 }
@@ -121,7 +121,7 @@ class PreviewGenerator{
             sb.append("""<div class="header">""");
             printBreadcrumb(pair);
             sb.append("</div>");
-            if (pair.hasChildrenChanges()){
+            if (pair.isChildrenChanges()){
                 sb.append("""<table cellspacing=\"0\" class="simple-table child">""");
                     sb.append("<tr>");
                         sb.append("<th>Type</th>");
@@ -143,7 +143,7 @@ class PreviewGenerator{
                                 sb.append("</td>");
                                 sb.append("<td>");
                                     if (child.getSourceName()!=null){
-                                        if (child.hasChildrenChanges() || child.hasAttributeChanges()){
+                                        if (child.isChildrenChanges() || child.isAttributeChanges()){
                                             printLink(child.getId(),child.getSourceName());
                                         } else {
                                             sb.append(child.getSourceName());
@@ -176,7 +176,7 @@ class PreviewGenerator{
                                 sb.append("</td>");
                                 sb.append("<td>");
                                     if (child.getTargetName()!=null){
-                                        if (child.hasChildrenChanges() || child.hasAttributeChanges()){
+                                        if (child.isChildrenChanges() || child.isAttributeChanges()){
                                             printLink(child.getId(),child.getTargetName());
                                         } else {
                                             sb.append(child.getTargetName());
@@ -188,7 +188,7 @@ class PreviewGenerator{
                     }
                 sb.append("</table>");
             }
-            if (pair.hasAttributeChanges()){
+            if (pair.isAttributeChanges()){
                 sb.append("""<div class="attr-header">Attrubute changes</div>""");
                 sb.append("""<table cellspacing=\"0\" class="simple-table attr">""");
                 sb.append("<tr>");
