@@ -5,8 +5,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.slf4j.Logger
 
 import com.branegy.dbmaster.model.NamedObject;
 import com.branegy.dbmaster.sync.api.*
@@ -62,9 +61,15 @@ class InventoryNamer implements Namer {
 class InventoryComparer extends BeanComparer {
     def connections
     def inventoryDBs
+    Logger logger;
+    
+    public InventoryComparer(Logger logger){
+        this.logger = logger;
+    }
     
     @Override
     public void syncPair(SyncPair pair, SyncSession session) {
+        this.logger = logger;
         String objectType = pair.getObjectType();
         Namer namer = session.getNamer();
         if (objectType.equals("Inventory")) {
@@ -95,30 +100,31 @@ class InventoryComparer extends BeanComparer {
             Dialect dialect = null
             List<SyncPair> childPairs = pair.getChildren()
             def sourceDatabases = inventoryDBs.get(sourceServer.getName())
-            try {
-                def targetDatabases = null;
-                if (targetServer!=null) {
+            def targetDatabases = null;
+            if (targetServer!=null) {
+                try {
                     Connector connector = ConnectionProvider.getConnector(targetServer)
                     dialect = connector.connect()
                     targetDatabases = dialect.getDatabases()
                     pair.setCaseSensitive(dialect.isCaseSensitive());
-                }
-                childPairs.addAll(mergeCollections(pair, sourceDatabases,targetDatabases, namer));
-            } catch (Exception e) {
-                // assumption: this exception is related to connectivity
-                session.logMessage("error", e.getMessage());
-                def targetDatabases = sourceDatabases.collect { db ->  
-                    def dbInfo = new DatabaseInfo(db.getDatabaseName(), "Not Accessible", false)
-	            dbInfo.setCustomData("State", "Not Accessible")
-                    return dbInfo
+                } catch (Exception e) {
+                    // assumption: this exception is related to connectivity
+                    pair.setCaseSensitive(true); // make safe megreCollection for equals databases
+                    session.logger.error(e.getMessage());
+                    targetDatabases = sourceDatabases.collect { db ->  
+                        def dbInfo = new DatabaseInfo(db.getDatabaseName(), "Not Accessible", false)
+                        dbInfo.setCustomData("State", "Not Accessible")
+                        return dbInfo
+                    }
+                    logger.warn("Can not load databases",e);
+                } finally{
+                    if (dialect!=null){
+                        dialect.close();
+                    }
                 }
                 childPairs.addAll(mergeCollections(pair, sourceDatabases, targetDatabases, namer));
-                e.printStackTrace()
-            } finally{
-                if (dialect!=null){
-                    dialect.close();
-                }
             }
+            
 //            Collection<NamedObject> sJobs = source.extraCollections.get("jobs");
 //            Collection<NamedObject> tJobs = target.extraCollections.get("jobs");
 //            children.addAll(mergeCollections(sJobs, tJobs, namer));
@@ -160,8 +166,8 @@ class InventorySyncSession extends SyncSession {
     Map<String, Database> connectionDbMap;
     
 
-    public InventorySyncSession(DbMaster dbm) {
-        super(new InventoryComparer());
+    public InventorySyncSession(DbMaster dbm, Logger logger) {
+        super(new InventoryComparer(logger));
         setNamer(new InventoryNamer());
         this.dbm = dbm
         inventorySrv = dbm.getService(InventoryService.class)
@@ -245,7 +251,7 @@ class InventorySyncSession extends SyncSession {
     }    
 }
 
-sync_session = new InventorySyncSession(dbm)
+sync_session = new InventorySyncSession(dbm, logger)
 
 def inventory = new RootObject("Inventory", "Inventory")
 sync_session.syncObjects(inventory, inventory)
