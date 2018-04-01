@@ -19,6 +19,7 @@ import com.branegy.dbmaster.core.Project;
 import com.branegy.dbmaster.model.DatabaseInfo;
 import com.branegy.inventory.api.InventoryService;
 import com.branegy.inventory.model.Database;
+import com.branegy.inventory.model.Job;
 import com.branegy.service.connection.api.ConnectionService;
 import com.branegy.service.connection.model.DatabaseConnection;
 import com.branegy.service.core.AbstractService;
@@ -28,9 +29,10 @@ import com.google.inject.persist.Transactional;
 import com.branegy.scripting.DbMaster
 import com.branegy.service.core.QueryRequest
 import com.branegy.dbmaster.sync.api.SyncSession.SearchTarget
-import com.branegy.dbmaster.sync.api.SyncService;
-import com.branegy.service.core.search.CustomCriterion;
-import com.branegy.service.core.search.CustomCriterion.Operator;
+import com.branegy.dbmaster.sync.api.SyncService
+import com.branegy.service.core.search.CustomCriterion
+import com.branegy.service.core.search.CustomCriterion.Operator
+import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType
 
 class InventoryNamer implements Namer {
         @Override
@@ -38,6 +40,7 @@ class InventoryNamer implements Namer {
             if (o instanceof RootObject) {                 return "Inventory";
             } else if (o instanceof DatabaseConnection) {  return ((DatabaseConnection)o).getName();
             } else if (o instanceof Database) {            return ((Database)o).getDatabaseName();
+            } else if (o instanceof Job)      {            return ((Job)o).getJobName();
             } else if (o instanceof DatabaseInfo) {        return ((DatabaseInfo)o).getName();
             } else if (o instanceof NamedObject) {         return ((NamedObject)o).name;
             } else {
@@ -49,6 +52,7 @@ class InventoryNamer implements Namer {
         public String getType(Object o) {
             if (o instanceof RootObject) {                 return "Inventory";
             } else if (o instanceof DatabaseConnection) {  return "Server";
+            } else if (o instanceof Job) {                 return "Job";
             } else if (o instanceof Database) {            return "Database";
             } else if (o instanceof DatabaseInfo) {        return "Database";
             } else if (o instanceof NamedObject) {         return ((NamedObject)o).type;
@@ -101,12 +105,19 @@ class InventoryComparer extends BeanComparer {
             List<SyncPair> childPairs = pair.getChildren()
             def sourceDatabases = inventoryDBs.get(sourceServer.getName())
             def targetDatabases = null;
+
+            def sourceJobs = session.inventorySrv.getJobList(new QueryRequest())
+            def targetJobs = null
+
             if (targetServer!=null) {
                 try {
                     Connector connector = ConnectionProvider.getConnector(targetServer)
                     dialect = connector.connect()
                     targetDatabases = dialect.getDatabases()
-                    pair.setCaseSensitive(dialect.isCaseSensitive());
+                    pair.setCaseSensitive(dialect.isCaseSensitive())
+
+                    targetJobs = dialect.getJobs()
+                    targetJobs.each{ it.setServerName(targetServer.getName()) }
                 } catch (Exception e) {
                     // assumption: this exception is related to connectivity
                     pair.setCaseSensitive(true); // make safe megreCollection for equals databases
@@ -116,13 +127,14 @@ class InventoryComparer extends BeanComparer {
                         dbInfo.setCustomData("State", "Not Accessible")
                         return dbInfo
                     }
-                    logger.warn("Can not load databases",e);
-                } finally{
+                    logger.warn("Can not load databases", e);
+                } finally {
                     if (dialect!=null){
                         dialect.close();
                     }
                 }
-                childPairs.addAll(mergeCollections(pair, sourceDatabases, targetDatabases, namer));
+                childPairs.addAll(mergeCollections(pair, sourceDatabases, targetDatabases, namer))
+                childPairs.addAll(mergeCollections(pair, sourceJobs, targetJobs, namer))
             }
             
 //            Collection<NamedObject> sJobs = source.extraCollections.get("jobs");
@@ -141,12 +153,22 @@ class InventoryComparer extends BeanComparer {
                         pair.getAttributes().add(new SyncAttributePair(key, sourceValue, targetValue))
                 }
             }
-        } else if (objectType.equals("JOB")) {
-            // all ok - nothing to compare for know - later will add attributes
+        } else if (objectType.equals("Job")) {
+            Job source = (Job)pair.getSource()
+            Job target = (Job)pair.getTarget()
+            List<SyncAttributePair> attrs = mergeAttributes(source?.getCustomMap(), target?.getCustomMap())
+            pair.getAttributes().addAll(attrs)
+            if (pair.getChangeType()==ChangeType.EQUALS) { 
+                for (SyncAttributePair attr : attrs) {
+                    if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
+                        pair.setChangeType(ChangeType.CHANGED)
+                    }
+                }
+            }
         } else if (objectType.equals("USER")) {
             NamedObject source = (NamedObject)pair.getSource();
             NamedObject target = (NamedObject)pair.getTarget();
-            List<SyncAttributePair> attrs = mergeAttributes(source.data, target.data);
+            List<SyncAttributePair> attrs = mergeAttributes(source.getCustomMap(), target.getCustomMap());
             pair.getAttributes().addAll(attrs);
             for (SyncAttributePair attr : attrs) {
                 if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
@@ -245,6 +267,51 @@ class InventorySyncSession extends SyncSession {
                 default:
                     throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
             }
+        } else if (objectType.equals("Job")) {
+            Job sourceJob = (Job)pair.getSource();
+            Job targetJob = (Job)pair.getTarget();
+            
+            switch (pair.getChangeType()) {
+                case ChangeType.NEW:
+                    String serverName = pair.getParentPair().getSourceName()
+                    //def db = connectionDbMap.get(serverName+"%"+targetDB.getName());
+                    //if (db == null) {
+                    //    db = new Database()
+                    //    db.setDatabaseName(targetDB.getName())
+                    targetJob.setServerName(serverName)
+                    //}
+                    // TODO(Restore operation)db.setCustomData(Database.DELETED, false);
+                    //for (SyncAttributePair attr : pair.getAttributes()) {
+                    //    if (attr.getChangeType() != SyncAttributePair.AttributeChangeType.EQUALS) {
+                    //        db.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
+                    //    }
+                    //}
+                    //if (sourceJob.isPersisted()) {
+                    //    inventorySrv.updateJob(sourceJob)
+                    //} else {
+                        inventorySrv.createJob(targetJob)
+                    //}
+                    break;
+                case ChangeType.CHANGED:
+                    for (SyncAttributePair attr : pair.getAttributes()) {
+                        if (attr.getChangeType() != SyncAttributePair.AttributeChangeType.EQUALS) {
+                            sourceJob.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
+                        }
+                    }
+                    inventorySrv.saveJob(sourceDB);
+                    break;
+                case ChangeType.DELETED:
+                    inventorySrv.deleteJob(sourceJob.getId());
+                    break;                    
+                case ChangeType.COPIED:
+                    throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
+                case ChangeType.EQUALS:                
+                    break;
+                default:
+                    throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
+            }
+
+
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
         }
