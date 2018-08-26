@@ -8,7 +8,7 @@
    <name>DBMaster Sync</name>
    <description>Synchronization framework for DBMaster. Helps to import external data</description>
 
-   <version>1.0.31</version>
+   <version>1.0.35</version>
    <packaging>bundle</packaging>
 
    <parent>

@@ -65,6 +65,7 @@ class InventoryNamer implements Namer {
 class InventoryComparer extends BeanComparer {
     def connections
     def inventoryDBs
+    def inventoryJobs
     Logger logger;
     
     public InventoryComparer(Logger logger){
@@ -84,7 +85,11 @@ class InventoryComparer extends BeanComparer {
             inventoryDBs = session.inventorySrv
                             .getDatabaseList(new QueryRequest("Deleted=no"))
                             .groupBy { it.getServerName() } 
-            
+
+            inventoryJobs = session.inventorySrv
+                            .getJobList(new QueryRequest("Deleted=no"))
+                            .groupBy { it.getServerName() }
+           
             def invConnections = []
             def invConnectionNames = []
             invConnectionNames.addAll(inventoryDBs.keySet())
@@ -106,7 +111,7 @@ class InventoryComparer extends BeanComparer {
             def sourceDatabases = inventoryDBs.get(sourceServer.getName())
             def targetDatabases = null;
 
-            def sourceJobs = session.inventorySrv.getJobList(new QueryRequest())
+            def sourceJobs = inventoryJobs.get(sourceServer.getName())
             def targetJobs = null
 
             if (targetServer!=null) {
@@ -117,11 +122,14 @@ class InventoryComparer extends BeanComparer {
                     pair.setCaseSensitive(dialect.isCaseSensitive())
 
                     targetJobs = dialect.getJobs()
-                    targetJobs.each{ it.setServerName(targetServer.getName()) }
+                    targetJobs.each{ 
+			it.setServerName(targetServer.getName()) 
+                        it.setCustomData(Database.DELETED, false)
+		    }
                 } catch (Exception e) {
                     // assumption: this exception is related to connectivity
                     pair.setCaseSensitive(true); // make safe megreCollection for equals databases
-                    session.logger.error(e.getMessage());
+                    session.logger.error(e.getMessage())
                     targetDatabases = sourceDatabases.collect { db ->  
                         def dbInfo = new DatabaseInfo(db.getDatabaseName(), "Not Accessible", false)
                         dbInfo.setCustomData("State", "Not Accessible")
@@ -137,10 +145,7 @@ class InventoryComparer extends BeanComparer {
                 childPairs.addAll(mergeCollections(pair, sourceJobs, targetJobs, namer))
             }
             
-//            Collection<NamedObject> sJobs = source.extraCollections.get("jobs");
-//            Collection<NamedObject> tJobs = target.extraCollections.get("jobs");
-//            children.addAll(mergeCollections(sJobs, tJobs, namer));
-//
+// TODO: Add users
 //            Collection<NamedObject> sUsers = source.extraCollections.get("users");
 //            Collection<NamedObject> tUsers = target.extraCollections.get("users");
 //            children.addAll(mergeCollections(sUsers, tUsers, namer));
@@ -279,6 +284,7 @@ class InventorySyncSession extends SyncSession {
                     //    db = new Database()
                     //    db.setDatabaseName(targetDB.getName())
                     targetJob.setServerName(serverName)
+                    targetJob.setCustomData(Database.DELETED, false);
                     //}
                     // TODO(Restore operation)db.setCustomData(Database.DELETED, false);
                     //for (SyncAttributePair attr : pair.getAttributes()) {
@@ -298,6 +304,7 @@ class InventorySyncSession extends SyncSession {
                             sourceJob.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
                         }
                     }
+                    sourceDB.setCustomData(Database.DELETED, false);
                     inventorySrv.saveJob(sourceDB);
                     break;
                 case ChangeType.DELETED:
