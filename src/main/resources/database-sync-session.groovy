@@ -4,6 +4,15 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.regex.Pattern
+import java.util.concurrent.Future
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.SynchronousQueue
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutionException
 
 import org.slf4j.Logger
 
@@ -20,6 +29,7 @@ import com.branegy.dbmaster.model.DatabaseInfo;
 import com.branegy.inventory.api.InventoryService;
 import com.branegy.inventory.model.Database;
 import com.branegy.inventory.model.Job;
+import com.branegy.persistence.custom.BaseCustomEntity
 import com.branegy.service.connection.api.ConnectionService;
 import com.branegy.service.connection.model.DatabaseConnection;
 import com.branegy.service.core.AbstractService;
@@ -63,10 +73,26 @@ class InventoryNamer implements Namer {
 }
 
 class InventoryComparer extends BeanComparer {
-    def connections
     def inventoryDBs
     def inventoryJobs
     Logger logger;
+    
+    static class ConnectionResult{
+        List<Database> databases;
+        List<Job> jobs;
+        boolean caseSensitive;
+        
+        public ConnectionResult(List<Database> databases, List<Job> jobs,  boolean caseSensitive) {
+            this.databases = databases;
+            this.jobs = jobs;
+            this.caseSensitive = caseSensitive;
+        }
+    }
+    
+    Map<String,Future<ConnectionResult>> connectionResults;
+    final ExecutorService executor = new ThreadPoolExecutor(20, Integer.MAX_VALUE,
+                                      20L, TimeUnit.SECONDS,
+                                      new SynchronousQueue<Runnable>());
     
     public InventoryComparer(Logger logger){
         this.logger = logger;
@@ -78,7 +104,7 @@ class InventoryComparer extends BeanComparer {
         String objectType = pair.getObjectType();
         Namer namer = session.getNamer();
         if (objectType.equals("Inventory")) {
-            connections = session.connectionSrv.getConnectionList().collectEntries{[it.name, it]}
+            def connections = session.connectionSrv.getConnectionList().collectEntries{[it.name, it]}
 
             connections.entrySet().removeAll { it.getValue().getDriver() == "ldap" }
 
@@ -102,6 +128,19 @@ class InventoryComparer extends BeanComparer {
                 }
                 invConnections.add(conn)                 
             }
+            
+            connectionResults = connections.values().collectEntries{[it.name,
+                executor.submit(new Callable<ConnectionResult>(){
+                    public ConnectionResult call()  throws Exception{
+                        DatabaseConnection connection = it;
+                        Connector connector = ConnectionProvider.getConnector(connection);
+                        def dialect = connector.connect();
+                        def databases = dialect.getDatabases();
+                        def jobs = dialect.getJobs();
+                        return new ConnectionResult(databases, jobs, dialect.isCaseSensitive());
+                    }
+                })    
+            ]};
             pair.getChildren().addAll(mergeCollections(pair, invConnections, connections.values(), namer));
         } else if (objectType.equals("Server")) {
             DatabaseConnection sourceServer = (DatabaseConnection)pair.getSource();
@@ -116,26 +155,52 @@ class InventoryComparer extends BeanComparer {
 
             if (targetServer!=null) {
                 try {
-                    Connector connector = ConnectionProvider.getConnector(targetServer)
-                    dialect = connector.connect()
-                    targetDatabases = dialect.getDatabases()
-                    pair.setCaseSensitive(dialect.isCaseSensitive())
+                    ConnectionResult result = connectionResults.get(targetServer.getName()).get();
+                    targetDatabases = new ArrayList(result.databases);
+                    pair.setCaseSensitive(result.isCaseSensitive())
 
-                    targetJobs = dialect.getJobs()
+                    targetJobs = new ArrayList(result.jobs)
                     targetJobs.each{ 
-			it.setServerName(targetServer.getName()) 
+                        it.setServerName(targetServer.getName()) 
                         it.setCustomData(Database.DELETED, false)
-		    }
-                } catch (Exception e) {
+        		    }
+                    if (targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS)!=null) {
+                        try {
+                            def patterns = targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS).split(",").collect{
+                                Pattern.compile(it.trim())
+                            };
+                            targetJobs = targetJobs.findAll{
+                                def jobName = it.getJobName();
+                                def enabled = !patterns.any{
+                                    it.matcher(jobName)
+                                }
+                                if (!enabled) {
+                                    session.logger.debug("Job {} is ignored",it.getJobName());
+                                }
+                                return enabled;
+                            };
+                        } catch (Exception e) {
+                            session.logger.error("Invalid SYNC_EXCLUDE_JOBS regexp {} for connection {}",
+                                targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS),
+                                targetServer.getName(),
+                                e);
+                            logger.warn("Invalid SYNC_EXCLUDE_JOBS regexp {} for connection {}", 
+                                targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS),
+                                targetServer.getName());
+                        }
+                    }
+                } catch (ExecutionException e) {
                     // assumption: this exception is related to connectivity
                     pair.setCaseSensitive(true); // make safe megreCollection for equals databases
-                    session.logger.error(e.getMessage())
-                    targetDatabases = sourceDatabases.collect { db ->  
+                    session.logger.error(e.getCause().getMessage())
+                    targetDatabases = sourceDatabases;
+                    
+                    /*targetDatabases = sourceDatabases.collect { db ->  
                         def dbInfo = new DatabaseInfo(db.getDatabaseName(), "Not Accessible", false)
                         dbInfo.setCustomData("State", "Not Accessible")
                         return dbInfo
-                    }
-                    logger.warn("Can not load databases", e);
+                    }*/
+                    logger.warn("Can not load databases", e.getCause());
                 } finally {
                     if (dialect!=null){
                         dialect.close();
@@ -192,7 +257,6 @@ class InventorySyncSession extends SyncSession {
     ConnectionService connectionSrv
     Map<String, Database> connectionDbMap;
     
-
     public InventorySyncSession(DbMaster dbm, Logger logger) {
         super(new InventoryComparer(logger));
         setNamer(new InventoryNamer());
@@ -227,6 +291,9 @@ class InventorySyncSession extends SyncSession {
 
     public void importChanges(SyncPair pair) {
         String objectType = pair.getObjectType();
+        if ( pair.getTarget() instanceof BaseCustomEntity) {
+            pair.getTarget().setCustomData("LastSync", lastSyncDate);
+        }
         if (objectType ==~ /Inventory|Server/) {
             pair.getChildren().each { importChanges(it) }
         } else if (objectType.equals("Database")) {
@@ -304,8 +371,8 @@ class InventorySyncSession extends SyncSession {
                             sourceJob.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
                         }
                     }
-                    sourceDB.setCustomData(Database.DELETED, false);
-                    inventorySrv.saveJob(sourceDB);
+                    sourceJob.setCustomData(Database.DELETED, false);
+                    inventorySrv.saveJob(sourceJob);
                     break;
                 case ChangeType.DELETED:
                     inventorySrv.deleteJob(sourceJob.getId());
