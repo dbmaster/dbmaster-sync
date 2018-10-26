@@ -288,13 +288,24 @@ class InventorySyncSession extends SyncSession {
             dbm.closeResources()
         } 
     }
+    
+    private void setLastSyncDate(SyncPair pair) {
+        if (pair.getTarget() instanceof BaseCustomEntity) {
+            pair.getTarget().setCustomData("Last Sync Date", lastSyncDate);
+        }
+        for (SyncPair child:pair.getChildren()) {
+            setLastSyncDate(child);
+        }
+    }
 
     public void importChanges(SyncPair pair) {
         String objectType = pair.getObjectType();
-        if ( pair.getTarget() instanceof BaseCustomEntity) {
-            pair.getTarget().setCustomData("LastSync", lastSyncDate);
-        }
-        if (objectType ==~ /Inventory|Server/) {
+        if (objectType.equals("Inventory")) {
+            setLastSyncDate(pair)
+            pair.getChildren().each {
+                importChanges(it)
+            }
+        } else if (objectType.equals("Server")) {
             pair.getChildren().each { importChanges(it) }
         } else if (objectType.equals("Database")) {
             Database     sourceDB = (Database)pair.getSource();
