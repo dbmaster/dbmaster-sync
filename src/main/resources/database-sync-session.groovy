@@ -134,10 +134,19 @@ class InventoryComparer extends BeanComparer {
                     public ConnectionResult call()  throws Exception{
                         DatabaseConnection connection = it;
                         Connector connector = ConnectionProvider.getConnector(connection);
-                        def dialect = connector.connect();
-                        def databases = dialect.getDatabases();
-                        def jobs = dialect.getJobs();
-                        return new ConnectionResult(databases, jobs, dialect.isCaseSensitive());
+                        def dialect = null;
+                        try {
+                            dialect = connector.connect();
+                            def databases = dialect.getDatabases();
+                            def jobs = dialect.getJobs();
+                            return new ConnectionResult(databases, jobs, dialect.isCaseSensitive());
+                        } finally {
+                            try {
+                                dialect?.close();
+                            } catch (Exception e) {
+                                logger.debug("Connection close",e);
+                            }
+                        }
                     }
                 })    
             ]};
