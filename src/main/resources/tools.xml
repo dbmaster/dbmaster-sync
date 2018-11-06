@@ -15,4 +15,13 @@
 
         <output  script="sync-history-details.groovy" type="html" />
     </tool>
+
+    <tool id="db-sync" title="Database sync" projectTypes="inventory">
+        <description>Synchronizes databases using project connections with inventory</description>
+        <parameters>
+            <parameter name="p_emails" title="Email" type="string" 
+                       required="false" width="400"  />
+        </parameters>
+        <output  script="db-sync-mailer.groovy" type="html" />
+    </tool>
 </tools>

@@ -8,13 +8,13 @@
    <name>DBMaster Sync</name>
    <description>Synchronization framework for DBMaster. Helps to import external data</description>
 
-   <version>1.0.43</version>
+   <version>1.0.44-SNAPSHOT</version>
    <packaging>bundle</packaging>
 
    <parent>
-      <groupId>io.dbmaster.tools</groupId>
-      <artifactId>dbmaster-root</artifactId>
-      <version>1.10</version>
+      <groupId>io.dbmaster.plugins</groupId>
+      <artifactId>dbmaster-plugin-parent</artifactId>
+      <version>1.12.1</version>
    </parent>
 
    <build>

@@ -1,0 +1,18 @@
+import io.dbmaster.testng.BaseToolTestNGCase;
+
+import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.assertNotNull;
+import org.testng.annotations.Test
+
+import com.branegy.tools.api.ExportType;
+
+
+public class DatabaseSyncIT extends BaseToolTestNGCase {
+
+    @Test
+    public void test() {
+        def parameters = [ "p_emails"  :  getTestProperty("db-sync.p_emails") ]
+        String result = tools.toolExecutor("db-sync", parameters).execute()
+        assertNotNull(result);
+    }
+}
