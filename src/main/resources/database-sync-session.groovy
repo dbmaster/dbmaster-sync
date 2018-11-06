@@ -1,9 +1,9 @@
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.impl.*
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map.Entry;
+import java.util.ArrayList
+import java.util.Iterator
+import java.util.List
+import java.util.Map.Entry
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.regex.Pattern
@@ -13,29 +13,29 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
-
+import java.sql.*
 import org.slf4j.Logger
 
-import com.branegy.dbmaster.model.NamedObject;
+import com.branegy.dbmaster.model.NamedObject
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.impl.*
-import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
-import com.branegy.dbmaster.connection.ConnectionProvider;
-import com.branegy.dbmaster.connection.Connector;
-import com.branegy.dbmaster.connection.Dialect;
-import com.branegy.dbmaster.core.Permission.Role;
-import com.branegy.dbmaster.core.Project;
-import com.branegy.dbmaster.model.DatabaseInfo;
-import com.branegy.inventory.api.InventoryService;
-import com.branegy.inventory.model.Database;
-import com.branegy.inventory.model.Job;
+import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
+import com.branegy.dbmaster.connection.ConnectionProvider
+import com.branegy.dbmaster.connection.Connector
+import com.branegy.dbmaster.connection.Dialect
+import com.branegy.dbmaster.core.Permission.Role
+import com.branegy.dbmaster.core.Project
+import com.branegy.dbmaster.model.DatabaseInfo
+import com.branegy.inventory.api.InventoryService
+import com.branegy.inventory.model.Database
+import com.branegy.inventory.model.Job
 import com.branegy.persistence.custom.BaseCustomEntity
-import com.branegy.service.connection.api.ConnectionService;
-import com.branegy.service.connection.model.DatabaseConnection;
-import com.branegy.service.core.AbstractService;
-import com.branegy.service.core.CheckedAccess;
+import com.branegy.service.connection.api.ConnectionService
+import com.branegy.service.connection.model.DatabaseConnection
+import com.branegy.service.core.AbstractService
+import com.branegy.service.core.CheckedAccess
 import com.branegy.service.core.exception.EntityNotFoundApiException
-import com.google.inject.persist.Transactional;
+import com.google.inject.persist.Transactional
 import com.branegy.scripting.DbMaster
 import com.branegy.service.core.QueryRequest
 import com.branegy.dbmaster.sync.api.SyncSession.SearchTarget
@@ -72,37 +72,40 @@ class InventoryNamer implements Namer {
         }
 }
 
+class ConnectionResult {
+    List<Database> databases
+    List<Job> jobs
+    boolean caseSensitive
+    String serverInfo
+    
+    public ConnectionResult(List<Database> databases, List<Job> jobs,  boolean caseSensitive, String serverInfo) {
+        this.databases = databases
+        this.jobs = jobs
+        this.caseSensitive = caseSensitive
+        this.serverInfo = serverInfo
+    }
+}
+
 class InventoryComparer extends BeanComparer {
     def inventoryDBs
     def inventoryJobs
-    Logger logger;
+    Logger logger
     
-    static class ConnectionResult{
-        List<Database> databases;
-        List<Job> jobs;
-        boolean caseSensitive;
-        
-        public ConnectionResult(List<Database> databases, List<Job> jobs,  boolean caseSensitive) {
-            this.databases = databases;
-            this.jobs = jobs;
-            this.caseSensitive = caseSensitive;
-        }
-    }
-    
-    Map<String,Future<ConnectionResult>> connectionResults;
+       
+    Map<String,Future<Object>> connectionResults;
     final ExecutorService executor = new ThreadPoolExecutor(20, Integer.MAX_VALUE,
                                       20L, TimeUnit.SECONDS,
                                       new SynchronousQueue<Runnable>());
     
-    public InventoryComparer(Logger logger){
-        this.logger = logger;
+    public InventoryComparer(Logger logger) {
+        this.logger = logger
     }
     
     @Override
     public void syncPair(SyncPair pair, SyncSession session) {
-        this.logger = logger;
-        String objectType = pair.getObjectType();
-        Namer namer = session.getNamer();
+        this.logger = logger
+        String objectType = pair.getObjectType()
+        Namer namer = session.getNamer()
         if (objectType.equals("Inventory")) {
             def connections = session.connectionSrv.getConnectionList().collectEntries{[it.name, it]}
 
@@ -121,7 +124,7 @@ class InventoryComparer extends BeanComparer {
             invConnectionNames.addAll(inventoryDBs.keySet())
             invConnectionNames.addAll(connections.keySet())
             invConnectionNames.unique().each { serverName->
-                def conn = connections[serverName]
+                def conn = null; // connections[serverName]
                 if (conn==null) {  
                     conn = new DatabaseConnection()
                     conn.setName(serverName)
@@ -130,43 +133,89 @@ class InventoryComparer extends BeanComparer {
             }
             
             connectionResults = connections.values().collectEntries{[it.name,
-                executor.submit(new Callable<ConnectionResult>(){
-                    public ConnectionResult call()  throws Exception{
-                        DatabaseConnection connection = it;
-                        Connector connector = ConnectionProvider.getConnector(connection);
-                        def dialect = null;
+                executor.submit(new Callable<Object>() {
+                    public Object call()  throws Exception {
+                        DatabaseConnection connection = it
+                        String name = it.name
+                        def dialect 
                         try {
-                            dialect = connector.connect();
-                            def databases = dialect.getDatabases();
-                            def jobs = dialect.getJobs();
-                            return new ConnectionResult(databases, jobs, dialect.isCaseSensitive());
+                            Connector connector = ConnectionProvider.getConnector(connection)
+                            dialect = connector.connect()
+                            def databases = dialect.getDatabases()
+                            def jobs = dialect.getJobs()
+                            def serverInfo = getServerInfo(connector)
+                            return new ConnectionResult(databases, jobs, dialect.isCaseSensitive(), serverInfo)
+                            } catch (Exception e) {
+                            logger.error("Cannot log sql server info {}", e);
+                            String errorMsg = e.getMessage()
+                            session.logger.error(errorMsg)
+                            return e
                         } finally {
                             try {
                                 dialect?.close();
                             } catch (Exception e) {
-                                logger.debug("Connection close",e);
+                                logger.debug("Error while losing connection", e);
                             }
                         }
                     }
                 })    
-            ]};
-            pair.getChildren().addAll(mergeCollections(pair, invConnections, connections.values(), namer));
+            ]}
+            pair.getChildren().addAll(mergeCollections(pair, invConnections, connections.values(), namer))
         } else if (objectType.equals("Server")) {
-            DatabaseConnection sourceServer = (DatabaseConnection)pair.getSource();
-            DatabaseConnection targetServer = (DatabaseConnection)pair.getTarget();
+            DatabaseConnection sourceServer = (DatabaseConnection)pair.getSource()
+            DatabaseConnection targetServer = (DatabaseConnection)pair.getTarget()
             Dialect dialect = null
             List<SyncPair> childPairs = pair.getChildren()
             def sourceDatabases = inventoryDBs.get(sourceServer.getName())
-            def targetDatabases = null;
+            def targetDatabases = null
 
             def sourceJobs = inventoryJobs.get(sourceServer.getName())
             def targetJobs = null
 
             if (targetServer!=null) {
                 try {
-                    ConnectionResult result = connectionResults.get(targetServer.getName()).get();
-                    targetDatabases = new ArrayList(result.databases);
+                    def result = connectionResults.get(targetServer.getName()).get()
+                    if (result instanceof Exception) {
+                        sourceServer.setCustomData("Sync.ErrorMessage", result.getMessage())
+                    } else {                        
+                        targetDatabases = new ArrayList(result.databases)
                     pair.setCaseSensitive(result.isCaseSensitive())
+                        def slurper = new XmlSlurper()
+
+                        def remoteServerInfo = slurper.parseText(result.serverInfo)
+                        sourceServer.setCustomData("ServerInfo", result.serverInfo)
+
+                        def serverInfo = targetServer.getCustomData("ServerInfo")
+                        if (serverInfo == null) {  
+                            serverInfo = "<ServerInfo></ServerInfo>"
+                        }
+                        def targetServerInfo = new XmlSlurper().parseText(serverInfo)
+
+			// System.out.println("localAttrs="+result.serverInfo)
+			// System.out.println("remoteAttrs="+serverInfo)
+                        
+
+			def remoteAttrs = new HashMap<String, Object>(100)
+			remoteServerInfo.Configuration.Config.each { config ->	remoteAttrs.put("Config."+config.name.text(), config.value.text()) }
+ 			remoteServerInfo.Properties.Properties.children().each { p ->  remoteAttrs.put("Property."+ p.name(), p.text()) }
+ 			remoteServerInfo.SysInfo.SysInfo.children().each { p ->  remoteAttrs.put("SysInfo."+ p.name(), p.text()) }
+			remoteAttrs.put("Version", remoteServerInfo.Version.text())
+
+			def localAttrs = new HashMap<String, Object>(100)
+			targetServerInfo.Configuration.Config.each { config ->	localAttrs.put("Config."+config.name.text(), config.value.text()) }
+ 			targetServerInfo.Properties.Properties.children().each { p ->  localAttrs.put("Property."+ p.name(), p.text()) }
+ 			targetServerInfo.SysInfo.SysInfo.children().each { p ->  localAttrs.put("SysInfo."+ p.name(), p.text()) }
+			localAttrs.put("Version", targetServerInfo.Version.text())
+
+                        List<SyncAttributePair> attrs = mergeAttributes(localAttrs, remoteAttrs)
+                        pair.getAttributes().addAll(attrs)
+			if (pair.getChangeType()==ChangeType.EQUALS) { 
+                		for (SyncAttributePair attr : pair.getAttributes()) {
+                    			if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
+                        			pair.setChangeType(ChangeType.CHANGED)
+                    			}
+                		}
+            		}
 
                     targetJobs = new ArrayList(result.jobs)
                     targetJobs.each{ 
@@ -177,17 +226,17 @@ class InventoryComparer extends BeanComparer {
                         try {
                             def patterns = targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS).split(",").collect{
                                 Pattern.compile(it.trim())
-                            };
+                                }
                             targetJobs = targetJobs.findAll{
-                                def jobName = it.getJobName();
+                                    def jobName = it.getJobName()
                                 def enabled = !patterns.any{
                                     it.matcher(jobName)
                                 }
                                 if (!enabled) {
-                                    session.logger.debug("Job {} is ignored",it.getJobName());
+                                        session.logger.debug("Job {} is ignored",it.getJobName())
+                                    }
+                                    return enabled
                                 }
-                                return enabled;
-                            };
                         } catch (Exception e) {
                             session.logger.error("Invalid SYNC_EXCLUDE_JOBS regexp {} for connection {}",
                                 targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS),
@@ -198,25 +247,22 @@ class InventoryComparer extends BeanComparer {
                                 targetServer.getName());
                         }
                     }
+                        childPairs.addAll(mergeCollections(pair, sourceDatabases, targetDatabases, namer))
+                        childPairs.addAll(mergeCollections(pair, sourceJobs, targetJobs, namer))
+                    }
                 } catch (ExecutionException e) {
                     // assumption: this exception is related to connectivity
-                    pair.setCaseSensitive(true); // make safe megreCollection for equals databases
-                    session.logger.error(e.getCause().getMessage())
-                    targetDatabases = sourceDatabases;
-                    
-                    /*targetDatabases = sourceDatabases.collect { db ->  
-                        def dbInfo = new DatabaseInfo(db.getDatabaseName(), "Not Accessible", false)
-                        dbInfo.setCustomData("State", "Not Accessible")
-                        return dbInfo
-                    }*/
-                    logger.warn("Can not load databases", e.getCause());
+                    //pair.setCaseSensitive(true) // make safe megreCollection for equals databases
+                    //targetDatabases = new ArrayList()
+                    //sourceDatabases = new ArrayList()
+                    //sourceJobs = new ArrayList()
+                    //targetJobs = new ArrayList()
+                    logger.warn("Can not get sql server info", e.getCause())
                 } finally {
                     if (dialect!=null){
                         dialect.close();
                     }
                 }
-                childPairs.addAll(mergeCollections(pair, sourceDatabases, targetDatabases, namer))
-                childPairs.addAll(mergeCollections(pair, sourceJobs, targetJobs, namer))
             }
             
 // TODO: Add users
@@ -228,17 +274,32 @@ class InventoryComparer extends BeanComparer {
             DatabaseInfo targetDB = (DatabaseInfo)pair.getTarget();
             if (targetDB!=null) {
                 targetDB.getCustomMap().each { key, targetValue ->
+                    if (!key.equals("Create Date")) {
                         def sourceValue = sourceDB==null ? null : sourceDB.getCustomData(key)
                         pair.getAttributes().add(new SyncAttributePair(key, sourceValue, targetValue))
                 }
             }
+            }
         } else if (objectType.equals("Job")) {
             Job source = (Job)pair.getSource()
             Job target = (Job)pair.getTarget()
-            List<SyncAttributePair> attrs = mergeAttributes(source?.getCustomMap(), target?.getCustomMap())
-            pair.getAttributes().addAll(attrs)
+
+            if (target!=null) {
+                target.getCustomMap().each { key, targetValue ->
+                    if (["Description", "Category", "Owner", "Enabled"].contains(key)) {
+                        def sourceValue = source==null ? null : source.getCustomData(key)
+                        pair.getAttributes().add(new SyncAttributePair(key, sourceValue, targetValue))
+                    }
+                }
+            }
+
+	    //["Description", "Category", "Owner", "Enabled"].each {  key ->
+            //    pair.getAttributes().add(new SyncAttributePair(key, source.getCustomData(key), target.getCustomData(key)))
+            //}
+            // List<SyncAttributePair> attrs = mergeAttributes(source?.getCustomMap(), target?.getCustomMap())
+            // pair.getAttributes().addAll(attrs)
             if (pair.getChangeType()==ChangeType.EQUALS) { 
-                for (SyncAttributePair attr : attrs) {
+                for (SyncAttributePair attr : pair.getAttributes()) {
                     if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
                         pair.setChangeType(ChangeType.CHANGED)
                     }
@@ -257,6 +318,100 @@ class InventoryComparer extends BeanComparer {
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
         }
+    }
+
+    private String getServerInfo(Connector connector) {
+        
+String query = """
+select
+(
+select (
+    select 
+        name,
+        value
+    from 
+        sys.configurations
+    order by 
+        name
+    for xml path('Config'), type
+) as Configuration,
+(
+    SELECT
+        SERVERPROPERTY('BuildClrVersion') as BuildClrVersion,
+        SERVERPROPERTY('Collation') as Collation,
+        SERVERPROPERTY('CollationID') as CollationID,
+        SERVERPROPERTY('ComparisonStyle') as ComparisonStyle,
+        SERVERPROPERTY('ComputerNamePhysicalNetBIOS') as ComputerNamePhysicalNetBIOS,
+        SERVERPROPERTY('Edition') as Edition,
+        SERVERPROPERTY('EditionID') as EditionID,
+        SERVERPROPERTY('EngineEdition') as EngineEdition,
+        SERVERPROPERTY('HadrManagerStatus') as HadrManagerStatus,
+        SERVERPROPERTY('InstanceDefaultDataPath') as InstanceDefaultDataPath,
+        SERVERPROPERTY('InstanceDefaultLogPath') as InstanceDefaultLogPath,
+        SERVERPROPERTY('InstanceName') as InstanceName,
+        SERVERPROPERTY('IsAdvancedAnalyticsInstalled') as IsAdvancedAnalyticsInstalled,
+        SERVERPROPERTY('IsClustered') as IsClustered,
+        SERVERPROPERTY('IsFullTextInstalled') as IsFullTextInstalled,
+        SERVERPROPERTY('IsHadrEnabled') as IsHadrEnabled,
+        SERVERPROPERTY('IsIntegratedSecurityOnly') as IsIntegratedSecurityOnly,
+        SERVERPROPERTY('IsLocalDB') as IsLocalDB,
+        SERVERPROPERTY('IsPolybaseInstalled') as IsPolybaseInstalled,
+        SERVERPROPERTY('IsSingleUser') as IsSingleUser,
+        SERVERPROPERTY('IsXTPSupported') as IsXTPSupported,
+        SERVERPROPERTY('LCID') as LCID,
+        SERVERPROPERTY('LicenseType') as LicenseType,
+        SERVERPROPERTY('MachineName') as MachineName,
+        SERVERPROPERTY('NumLicenses') as NumLicenses,
+--        SERVERPROPERTY('ProcessID') as ProcessID,
+        SERVERPROPERTY('ProductBuild') as ProductBuild,
+        SERVERPROPERTY('ProductBuildType') as ProductBuildType,
+        SERVERPROPERTY('ProductLevel') as ProductLevel,
+        SERVERPROPERTY('ProductMajorVersion') as ProductMajorVersion,
+        SERVERPROPERTY('ProductMinorVersion') as ProductMinorVersion,
+        SERVERPROPERTY('ProductUpdateLevel') as ProductUpdateLevel,
+        SERVERPROPERTY('ProductUpdateReference') as ProductUpdateReference,
+        SERVERPROPERTY('ProductVersion') as ProductVersion,
+        SERVERPROPERTY('ResourceLastUpdateDateTime') as ResourceLastUpdateDateTime,
+        SERVERPROPERTY('ResourceVersion') as ResourceVersion,
+        SERVERPROPERTY('ServerName') as ServerName,
+        SERVERPROPERTY('SqlCharSet') as SqlCharSet,
+        SERVERPROPERTY('SqlCharSetName') as SqlCharSetName,
+        SERVERPROPERTY('SqlSortOrder') as SqlSortOrder,
+        SERVERPROPERTY('SqlSortOrderName') as SqlSortOrderName,
+        SERVERPROPERTY('FilestreamShareName') as FilestreamShareName,
+        SERVERPROPERTY('FilestreamConfiguredLevel') as FilestreamConfiguredLevel,
+        SERVERPROPERTY('FilestreamEffectiveLevel') as FilestreamEffectiveLevel
+    for xml path('Properties'), type
+)
+as Properties,
+@@VERSION as Version,
+(
+    select 
+        cpu_count, 
+        hyperthread_ratio,
+        -- physical_memory_kb,
+        -- virtual_memory_kb,
+        max_workers_count,
+        scheduler_count 
+    from 
+        sys.dm_os_sys_info
+    for xml path('SysInfo'), type
+) as SysInfo
+for xml path('ServerInfo')
+) as ServerInfo
+"""
+
+
+        def conn = connector.getJdbcConnection(null)
+        Statement statement = conn.createStatement()
+        ResultSet rs = statement.executeQuery(query)
+        String serverInfoXML = ""
+        if (rs.next()) {
+             serverInfoXML = rs.getString("ServerInfo")
+        }
+        rs.close()
+        conn.close()
+        return serverInfoXML
     }
 }
 
@@ -315,15 +470,18 @@ class InventorySyncSession extends SyncSession {
                 importChanges(it)
             }
         } else if (objectType.equals("Server")) {
+            DatabaseConnection source = (DatabaseConnection)pair.getSource();
+            DatabaseConnection target = (DatabaseConnection)pair.getTarget();
+            target.setCustomData("ServerInfo", source.getCustomData("ServerInfo"))
+	    connectionSrv.updateConnection(target)
             pair.getChildren().each { importChanges(it) }
         } else if (objectType.equals("Database")) {
             Database     sourceDB = (Database)pair.getSource();
             DatabaseInfo targetDB = (DatabaseInfo)pair.getTarget();
-            
             switch (pair.getChangeType()) {
                 case ChangeType.NEW:
                     String serverName = pair.getParentPair().getSourceName()
-                    def db = connectionDbMap.get(serverName+"%"+targetDB.getName());
+                    def db = connectionDbMap.get(serverName + "%" + targetDB.getName())
                     if (db == null){
                         db = new Database()
                         db.setDatabaseName(targetDB.getName())
@@ -404,8 +562,6 @@ class InventorySyncSession extends SyncSession {
                 default:
                     throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
             }
-
-
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
         }
