@@ -4,32 +4,41 @@ import java.util.Collections
 
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
-import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType
+import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType;
 
-class PreviewGenerator {
-    def changePairClass = [
-        "new",
-        "changed",
-        "changed",
-        "deleted",
-        ""
-    ];
-    def changeAttrClass = [
-        "new",
-        "changed",
-        "deleted",
-        ""
-    ];
+public class PreviewGenerator implements SummaryGenerator {
+    // todo should be copied
+    def changePairClass = [ "new", "changed", "changed", "deleted", ""];
+    def changeAttrClass = [ "new", "changed", "deleted", "" ];
     
     private StringBuilder sb;
     private List<SyncPair> path = new ArrayList<SyncPair>(10);
     private showChangesOnly;
     private Set<String> longText;
    
-    public PreviewGenerator(boolean showChangesOnly) {
-        this.showChangesOnly = showChangesOnly;
+    public PreviewGenerator() {
     }
-     
+
+    public PreviewGenerator(boolean showChangesOnly) {
+        this.showChangesOnly = showChangesOnly
+    }
+    
+    public String generateSummary(SyncSession session) {
+        return generatePreview(session)    
+    }
+
+    public String generateSummary(SyncPair pair) {
+        sb = new StringBuilder(100*1024)
+        printSyncPair(pair)
+        return sb.toString()    
+    }
+
+    public void setParameter(String parameterName, Object value) {
+        if (parameterName.equals(SHOW_CHANGES_ONLY)) {
+            showChangesOnly = (Boolean)value;
+        }
+    }
+
     public synchronized String generatePreview(SyncSession session) {
         sb = new StringBuilder(100*1024);
         String longTextString = session.getParameter("longText");
@@ -381,5 +390,6 @@ class PreviewGenerator {
     def syncPairSorter = new PreviewComparatorByTarget();
 }
 
-htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession)
+summaryGenerator = new PreviewGenerator()
+// .generatePreview(syncSession)
 // syncSession.setParameter("html", htmlPreview)
