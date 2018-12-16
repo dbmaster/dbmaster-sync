@@ -1,10 +1,10 @@
-import java.util.Comparator;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.Comparator
+import java.util.Arrays
+import java.util.Collections
 
 import com.branegy.dbmaster.sync.api.*
-import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
-import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType;
+import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
+import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType
 
 class PreviewGenerator {
     def changePairClass = [
@@ -25,7 +25,6 @@ class PreviewGenerator {
     private List<SyncPair> path = new ArrayList<SyncPair>(10);
     private showChangesOnly;
     private Set<String> longText;
-    // private Deque<SyncPair> queue = new ArrayDeque<SyncPair>(1000);
    
     public PreviewGenerator(boolean showChangesOnly) {
         this.showChangesOnly = showChangesOnly;
@@ -34,8 +33,7 @@ class PreviewGenerator {
     public synchronized String generatePreview(SyncSession session) {
         sb = new StringBuilder(100*1024);
         String longTextString = session.getParameter("longText");
-        longText = longTextString == null ? Collections.emptySet()
-            : Arrays.asList(longTextString.split(";")) as Set;
+        longText = longTextString == null ? Collections.emptySet() : Arrays.asList(longTextString.split(";")) as Set;
             
         sb.append("""<script type="text/javascript">""");
         sb.append("""
@@ -77,56 +75,58 @@ class PreviewGenerator {
                 sb.append("</table>")
             }
         } else if (type.equals("Server")) {
-            sb.append("<tr valign=\"bottom\"><td style=\"margin:3px; vertical-align:top\">").append(pair.sourceName).append("</td><td style=\"margin:3px;vertical-align:top\">")
-            def error = pair.source.getCustomData("Sync.ErrorMessage")
-            if (error!=null) {
-                sb.append("Error:"  + error)
-            } else if (change == ChangeType.EQUALS) {
-                sb.append("No changes found")                
-            } else {
-                sb.append("<ul style=\"margin:0px;\" >");
-                def hasChanges = (pair.getAttributes().find { it.changeType != AttributeChangeType.EQUALS } != null) 
-                if (hasChanges) {
-                   sb.append("<li>Change(s) in parameters/configuration/sysinfo</li>");
-  	           printAttributeDiff(pair)
-                }
-                for (SyncPair child : pair.getChildren()) {
-                    if (child.changeType == ChangeType.CHANGED) {
-                        printSyncPair(child)
+            def errorStatus = pair.getErrorStatus()
+            if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE || change != ChangeType.EQUALS) {
+                sb.append("<tr valign=\"bottom\"><td style=\"margin:3px; vertical-align:top\">").append(pair.sourceName).append("</td><td style=\"margin:3px;vertical-align:top\">")
+                if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE) {
+                    sb.append("Error:"  + errorStatus.syncPair.error)
+            //    } else if (change == ChangeType.EQUALS) {
+            //        sb.append("No changes found")                
+                } else {
+                    sb.append("<ul style=\"margin:0px;\" >");
+                    def hasChanges = (pair.getAttributes().find { it.changeType != AttributeChangeType.EQUALS } != null) 
+                    if (hasChanges) {
+                        sb.append("<li>Change(s) in parameters/configuration/sysinfo</li>");
+                        printAttributeDiff(pair)
                     }
-                }
-                def deletedJobs = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Job" }
-                def newJobs = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Job" }
-                def newDbs  = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Database" }
-                def deletedDbs = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Database" }
-                if (deletedDbs.size()==1) {
-                    sb.append("<li>Database "+deletedDbs[0].sourceName + " was deleted</li>")                    
-                }
-                if (deletedDbs.size()>1) {
-                    sb.append("<li>"+deletedDbs.size()+" databases were removed: "+deletedDbs.collect{it.sourceName}.join(", ")+"</li>")
-                }
-                if (newDbs.size()==1) {
-                    sb.append("<li>Database "+newDbs[0].targetName + " was added</li>")
-                }
-                if (newDbs.size()>1) {
-                    sb.append("<li>"+newDbs.size()+" databases added: "+newDbs.collect{it.targetName}.join(", ")+"</li>")
-                }
+                    for (SyncPair child : pair.getChildren()) {
+                        if (child.changeType == ChangeType.CHANGED) {
+                            printSyncPair(child)
+                        }
+                    }
+                    def deletedJobs = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Job" }
+                    def newJobs = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Job" }
+                    def newDbs  = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Database" }
+                    def deletedDbs = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Database" }
+                    if (deletedDbs.size()==1) {
+                        sb.append("<li>Database "+deletedDbs[0].sourceName + " was deleted</li>")                    
+                    }
+                    if (deletedDbs.size()>1) {
+                        sb.append("<li>"+deletedDbs.size()+" databases were removed: "+deletedDbs.collect{it.sourceName}.join(", ")+"</li>")
+                    }
+                    if (newDbs.size()==1) {
+                        sb.append("<li>Database "+newDbs[0].targetName + " was added</li>")
+                    }
+                    if (newDbs.size()>1) {
+                        sb.append("<li>"+newDbs.size()+" databases added: "+newDbs.collect{it.targetName}.join(", ")+"</li>")
+                    }
 
-                if (deletedJobs.size()==1) {
-                    sb.append("<li>Job "+deletedJobs[0].sourceName + " was deleted</li>")                    
+                    if (deletedJobs.size()==1) {
+                        sb.append("<li>Job "+deletedJobs[0].sourceName + " was deleted</li>")                    
+                    }
+                    if (deletedJobs.size()>1) {
+                        sb.append("<li>"+deletedJobs.size()+" jobs were removed: "+deletedJobs.collect{it.sourceName}.join(", ")+"</li>")
+                    }
+                    if (newJobs.size()==1) {
+                        sb.append("<li>Job "+newJobs[0].targetName + " was added</li>")
+                    }
+                    if (newJobs.size()>1) {
+                        sb.append("<li>"+newJobs.size()+" jobs added: "+newJobs.collect{it.targetName}.join(", ")+"</li>")
+                    }                
+                    sb.append("</ul>");
                 }
-                if (deletedJobs.size()>1) {
-                    sb.append("<li>"+deletedJobs.size()+" jobs were removed: "+deletedJobs.collect{it.sourceName}.join(", ")+"</li>")
-                }
-                if (newJobs.size()==1) {
-                    sb.append("<li>Job "+newJobs[0].targetName + " was added</li>")
-                }
-                if (newJobs.size()>1) {
-                    sb.append("<li>"+newJobs.size()+" jobs added: "+newJobs.collect{it.targetName}.join(", ")+"</li>")
-                }                
-                sb.append("</ul>");
+                sb.append("</td></tr>")
             }
-            sb.append("</td></tr>")           
         } else if (type.equals("Database")) {
             sb.append("<li>Database " + pair.sourceName + " changed</li>")
             printAttributeDiff(pair)
@@ -180,63 +180,63 @@ class PreviewGenerator {
         sb.append("""<div class="item """);
         sb.append("border-"+changePairClass.get(pair.getChangeType().ordinal()));
         sb.append("\">");
-            sb.append("""<div class="header">""");
-            printBreadcrumb(pair);
-            sb.append("</div>");
-            if (pair.isChildrenChanges()){
-                sb.append("""<table cellspacing=\"0\" class="simple-table child">""");
-                    sb.append("<tr>");
-                        sb.append("<th>Type</th>");
-                        sb.append("<th>Status</th>");
-                        sb.append("<th>Source</th>");
-                        sb.append("<th>Index</th>");
-                        sb.append("<th>Target</th>");
-                    sb.append("</tr>");
+        sb.append("""<div class="header">""");
+        printBreadcrumb(pair);
+        sb.append("</div>");
+        if (pair.isChildrenChanges()){
+            sb.append("""<table cellspacing=\"0\" class="simple-table child">""");
+            sb.append("<tr>");
+            sb.append("<th>Type</th>");
+            sb.append("<th>Status</th>");
+            sb.append("<th>Source</th>");
+            sb.append("<th>Index</th>");
+            sb.append("<th>Target</th>");
+            sb.append("</tr>");
                     for (SyncPair child: pair.getChildren()){
                         if (!showChangesOnly || child.isOrdered() || child.getChangeType()!=ChangeType.EQUALS){
                             sb.append("<tr class=\"");
                             sb.append(changePairClass.get(child.getChangeType().ordinal()));
                             sb.append("\">");
-                                sb.append("<td>");
-                                    sb.append(child.getObjectType());
-                                sb.append("</td>");
-                                sb.append("<td>");
-                                    sb.append(""+child.getChangeType());
-                                sb.append("</td>");
-                                sb.append("<td>");
-                                    if (child.getSourceName()!=null){
-                                        if (child.isChildrenChanges() || child.isAttributeChanges()){
-                                            printLink(child.getId(),child.getSourceName());
-                                        } else {
-                                            sb.append(child.getSourceName());
-                                        }
-                                    }
-                                sb.append("</td>");
-                                if (child.isOrderChanged()){
-                                    sb.append("<td class=\"changed\">");
+                            sb.append("<td>");
+                            sb.append(child.getObjectType());
+                            sb.append("</td>");
+                            sb.append("<td>");
+                            sb.append(""+child.getChangeType());
+                            sb.append("</td>");
+                            sb.append("<td>");
+                            if (child.getSourceName()!=null){
+                                if (child.isChildrenChanges() || child.isAttributeChanges()){
+                                    printLink(child.getId(),child.getSourceName());
                                 } else {
-                                    sb.append("<td>");
+                                    sb.append(child.getSourceName());
                                 }
-                                    if (child.isOrdered()){
-                                        if (child.getSourceIndex()!=null){
-                                            sb.append("<div class=\"i-s\">");
-                                            sb.append(child.getSourceIndex()+1);
-                                            sb.append("</div>");
-                                            
-                                            if (child.getTargetIndex()!=null){
-                                                sb.append("<div class=\"i-a\">&rarr;</div>");
-                                                sb.append("<div class=\"i-t\">");
-                                                sb.append(child.getTargetIndex()+1);
-                                                sb.append("</div>");
-                                            }
-                                        } else {
-                                            sb.append("<div class=\"i-t\" style=\"float:right;\">");
-                                            sb.append(child.getTargetIndex()+1);
-                                            sb.append("</div>");
-                                        }
-                                    }
-                                sb.append("</td>");
+                            }
+                            sb.append("</td>");
+                            if (child.isOrderChanged()){
+                                sb.append("<td class=\"changed\">");
+                            } else {
                                 sb.append("<td>");
+                            }
+                            if (child.isOrdered()){
+                                if (child.getSourceIndex()!=null){
+                                    sb.append("<div class=\"i-s\">");
+                                    sb.append(child.getSourceIndex()+1);
+                                    sb.append("</div>");
+                                    
+                                    if (child.getTargetIndex()!=null){
+                                        sb.append("<div class=\"i-a\">&rarr;</div>");
+                                        sb.append("<div class=\"i-t\">");
+                                        sb.append(child.getTargetIndex()+1);
+                                        sb.append("</div>");
+                                    }
+                                } else {
+                                    sb.append("<div class=\"i-t\" style=\"float:right;\">");
+                                    sb.append(child.getTargetIndex()+1);
+                                    sb.append("</div>");
+                                }
+                            }
+                            sb.append("</td>");
+                            sb.append("<td>");
                                     if (child.getTargetName()!=null){
                                         if (child.isChildrenChanges() || child.isAttributeChanges()){
                                             printLink(child.getId(),child.getTargetName());
@@ -381,7 +381,5 @@ class PreviewGenerator {
     def syncPairSorter = new PreviewComparatorByTarget();
 }
 
-htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
-if (!showChangesOnly){ // save for diff only
-    syncSession.setParameter("html", htmlPreview); // TODO subject to change
-}
+htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession)
+// syncSession.setParameter("html", htmlPreview)

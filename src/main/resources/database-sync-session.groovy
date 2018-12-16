@@ -45,31 +45,31 @@ import com.branegy.service.core.search.CustomCriterion.Operator
 import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType
 
 class InventoryNamer implements Namer {
-        @Override
-        public String getName(Object o) {
-            if (o instanceof RootObject) {                 return "Inventory";
-            } else if (o instanceof DatabaseConnection) {  return ((DatabaseConnection)o).getName();
-            } else if (o instanceof Database) {            return ((Database)o).getDatabaseName();
-            } else if (o instanceof Job)      {            return ((Job)o).getJobName();
-            } else if (o instanceof DatabaseInfo) {        return ((DatabaseInfo)o).getName();
-            } else if (o instanceof NamedObject) {         return ((NamedObject)o).name;
-            } else {
-                throw new IllegalArgumentException("Unexpected object class "+o);
-            }
+    @Override
+    public String getName(Object o) {
+        if (o instanceof RootObject) {                 return "Inventory";
+        } else if (o instanceof DatabaseConnection) {  return ((DatabaseConnection)o).getName();
+        } else if (o instanceof Database) {            return ((Database)o).getDatabaseName();
+        } else if (o instanceof Job)      {            return ((Job)o).getJobName();
+        } else if (o instanceof DatabaseInfo) {        return ((DatabaseInfo)o).getName();
+        } else if (o instanceof NamedObject) {         return ((NamedObject)o).name;
+        } else {
+            throw new IllegalArgumentException("Unexpected object class "+o);
         }
+    }
 
-        @Override
-        public String getType(Object o) {
-            if (o instanceof RootObject) {                 return "Inventory";
-            } else if (o instanceof DatabaseConnection) {  return "Server";
-            } else if (o instanceof Job) {                 return "Job";
-            } else if (o instanceof Database) {            return "Database";
-            } else if (o instanceof DatabaseInfo) {        return "Database";
-            } else if (o instanceof NamedObject) {         return ((NamedObject)o).type;
-            } else {
-                throw new IllegalArgumentException("Unexpected object class "+o);
-            }
+    @Override
+    public String getType(Object o) {
+        if (o instanceof RootObject) {                 return "Inventory";
+        } else if (o instanceof DatabaseConnection) {  return "Server";
+        } else if (o instanceof Job) {                 return "Job";
+        } else if (o instanceof Database) {            return "Database";
+        } else if (o instanceof DatabaseInfo) {        return "Database";
+        } else if (o instanceof NamedObject) {         return ((NamedObject)o).type;
+        } else {
+            throw new IllegalArgumentException("Unexpected object class "+o);
         }
+    }
 }
 
 class ConnectionResult {
@@ -145,7 +145,7 @@ class InventoryComparer extends BeanComparer {
                             def jobs = dialect.getJobs()
                             def serverInfo = getServerInfo(connector)
                             return new ConnectionResult(databases, jobs, dialect.isCaseSensitive(), serverInfo)
-                            } catch (Exception e) {
+                        } catch (Exception e) {
                             logger.error("Cannot log sql server info {}", e);
                             String errorMsg = e.getMessage()
                             session.logger.error(errorMsg)
@@ -176,10 +176,10 @@ class InventoryComparer extends BeanComparer {
                 try {
                     def result = connectionResults.get(targetServer.getName()).get()
                     if (result instanceof Exception) {
-                        sourceServer.setCustomData("Sync.ErrorMessage", result.getMessage())
-                    } else {                        
+                        pair.setError(result.getMessage())
+                    } else {
                         targetDatabases = new ArrayList(result.databases)
-                    pair.setCaseSensitive(result.isCaseSensitive())
+                        pair.setCaseSensitive(result.isCaseSensitive())
                         def slurper = new XmlSlurper()
 
                         def remoteServerInfo = slurper.parseText(result.serverInfo)
@@ -191,84 +191,73 @@ class InventoryComparer extends BeanComparer {
                         }
                         def targetServerInfo = new XmlSlurper().parseText(serverInfo)
 
-			// System.out.println("localAttrs="+result.serverInfo)
-			// System.out.println("remoteAttrs="+serverInfo)
-                        
+                        def remoteAttrs = new HashMap<String, Object>(100)
+                        remoteServerInfo.Configuration.Config.each { config -> remoteAttrs.put("Config."+config.name.text(), config.value.text()) }
+                        remoteServerInfo.Properties.Properties.children().each { p ->  remoteAttrs.put("Property."+ p.name(), p.text()) }
+                        remoteServerInfo.SysInfo.SysInfo.children().each { p ->  remoteAttrs.put("SysInfo."+ p.name(), p.text()) }
+                        remoteAttrs.put("Version", remoteServerInfo.Version.text())
 
-			def remoteAttrs = new HashMap<String, Object>(100)
-			remoteServerInfo.Configuration.Config.each { config ->	remoteAttrs.put("Config."+config.name.text(), config.value.text()) }
- 			remoteServerInfo.Properties.Properties.children().each { p ->  remoteAttrs.put("Property."+ p.name(), p.text()) }
- 			remoteServerInfo.SysInfo.SysInfo.children().each { p ->  remoteAttrs.put("SysInfo."+ p.name(), p.text()) }
-			remoteAttrs.put("Version", remoteServerInfo.Version.text())
+                        def localAttrs = new HashMap<String, Object>(100)
+                        targetServerInfo.Configuration.Config.each { config -> localAttrs.put("Config."+config.name.text(), config.value.text()) }
+                        targetServerInfo.Properties.Properties.children().each { p -> localAttrs.put("Property."+ p.name(), p.text()) }
+                        targetServerInfo.SysInfo.SysInfo.children().each { p ->  localAttrs.put("SysInfo."+ p.name(), p.text()) }
+                        localAttrs.put("Version", targetServerInfo.Version.text())
 
-			def localAttrs = new HashMap<String, Object>(100)
-			targetServerInfo.Configuration.Config.each { config ->	localAttrs.put("Config."+config.name.text(), config.value.text()) }
- 			targetServerInfo.Properties.Properties.children().each { p ->  localAttrs.put("Property."+ p.name(), p.text()) }
- 			targetServerInfo.SysInfo.SysInfo.children().each { p ->  localAttrs.put("SysInfo."+ p.name(), p.text()) }
-			localAttrs.put("Version", targetServerInfo.Version.text())
-
-                        List<SyncAttributePair> attrs = mergeAttributes(localAttrs, remoteAttrs)
+                        List<SyncAttributePair> attrs = mergeAttributes(localAttrs, remoteAttrs, true)
                         pair.getAttributes().addAll(attrs)
-			if (pair.getChangeType()==ChangeType.EQUALS) { 
-                		for (SyncAttributePair attr : pair.getAttributes()) {
-                    			if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
-                        			pair.setChangeType(ChangeType.CHANGED)
-                    			}
-                		}
-            		}
+                        if (pair.getChangeType()==ChangeType.EQUALS) {
+                            for (SyncAttributePair attr : pair.getAttributes()) {
+                                if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
+                                    pair.setChangeType(ChangeType.CHANGED)
+                                }
+                            }
+                        }
 
-                    targetJobs = new ArrayList(result.jobs)
-                    targetJobs.each{ 
-                        it.setServerName(targetServer.getName()) 
-                        it.setCustomData(Database.DELETED, false)
-        		    }
-                    if (targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS)!=null) {
-                        try {
-                            def patterns = targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS).split(",").collect{
-                                Pattern.compile(it.trim())
+                        targetJobs = new ArrayList(result.jobs)
+                        targetJobs.each { 
+                            it.setServerName(targetServer.getName()) 
+                            it.setCustomData(Database.DELETED, false)
+                        }
+                        if (targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS)!=null) {
+                            try {
+                                def patterns = targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS).split(",").collect{
+                                    Pattern.compile(it.trim())
                                 }
-                            targetJobs = targetJobs.findAll{
+                                targetJobs = targetJobs.findAll {
                                     def jobName = it.getJobName()
-                                def enabled = !patterns.any{
-                                    it.matcher(jobName)
-                                }
-                                if (!enabled) {
+                                    def enabled = !patterns.any {  it.matcher(jobName) }
+                                    if (!enabled) {
                                         session.logger.debug("Job {} is ignored",it.getJobName())
                                     }
                                     return enabled
                                 }
-                        } catch (Exception e) {
-                            session.logger.error("Invalid SYNC_EXCLUDE_JOBS regexp {} for connection {}",
-                                targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS),
-                                targetServer.getName(),
-                                e);
-                            logger.warn("Invalid SYNC_EXCLUDE_JOBS regexp {} for connection {}", 
-                                targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS),
-                                targetServer.getName());
+                            } catch (Exception e) {
+                                session.logger.error("Invalid SYNC_EXCLUDE_JOBS regexp {} for connection {}",
+                                    targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS),
+                                    targetServer.getName(),
+                                    e);
+                                logger.warn("Invalid SYNC_EXCLUDE_JOBS regexp {} for connection {}", 
+                                    targetServer.getCustomData(DatabaseConnection.SYNC_EXCLUDE_JOBS),
+                                    targetServer.getName());
+                            }
+                        }
+                            childPairs.addAll(mergeCollections(pair, sourceDatabases, targetDatabases, namer))
+                            childPairs.addAll(mergeCollections(pair, sourceJobs, targetJobs, namer))
+                        }
+                    } catch (ExecutionException e) {
+                        // assumption: this exception is related to connectivity
+                        //pair.setCaseSensitive(true) // make safe megreCollection for equals databases
+                        //targetDatabases = new ArrayList()
+                        //sourceDatabases = new ArrayList()
+                        //sourceJobs = new ArrayList()
+                        //targetJobs = new ArrayList()
+                        logger.warn("Can not get sql server info", e.getCause())
+                    } finally {
+                        if (dialect!=null){
+                            dialect.close();
                         }
                     }
-                        childPairs.addAll(mergeCollections(pair, sourceDatabases, targetDatabases, namer))
-                        childPairs.addAll(mergeCollections(pair, sourceJobs, targetJobs, namer))
-                    }
-                } catch (ExecutionException e) {
-                    // assumption: this exception is related to connectivity
-                    //pair.setCaseSensitive(true) // make safe megreCollection for equals databases
-                    //targetDatabases = new ArrayList()
-                    //sourceDatabases = new ArrayList()
-                    //sourceJobs = new ArrayList()
-                    //targetJobs = new ArrayList()
-                    logger.warn("Can not get sql server info", e.getCause())
-                } finally {
-                    if (dialect!=null){
-                        dialect.close();
-                    }
-                }
-            }
-            
-// TODO: Add users
-//            Collection<NamedObject> sUsers = source.extraCollections.get("users");
-//            Collection<NamedObject> tUsers = target.extraCollections.get("users");
-//            children.addAll(mergeCollections(sUsers, tUsers, namer));
+                }           
         } else if (objectType.equals("Database")) {
             Database sourceDB = (Database)pair.getSource();
             DatabaseInfo targetDB = (DatabaseInfo)pair.getTarget();
@@ -283,7 +272,21 @@ class InventoryComparer extends BeanComparer {
         } else if (objectType.equals("Job")) {
             Job source = (Job)pair.getSource()
             Job target = (Job)pair.getTarget()
+            def slurper = new XmlSlurper()
 
+            def localAttrs  = new HashMap<String, Object>(5)
+            def remoteAttrs = new HashMap<String, Object>(5)
+            def localDef    = slurper.parseText(source?.getCustomData("JobDefinition") ?: "<JobDefinition />")
+            def remoteDef   = slurper.parseText(target?.getCustomData("JobDefinition") ?: "<JobDefinition />")
+
+            remoteDef.children().each { attribute ->
+                if (attribute.children().size()==0) remoteAttrs.put(attribute.name(),attribute.text())
+            }
+            localDef.children().each { attribute ->
+                if (attribute.children().size()==0) localAttrs.put(attribute.name(),attribute.text())
+            }
+            pair.getAttributes().addAll(mergeAttributes(localAttrs, remoteAttrs, true))
+            
             if (target!=null) {
                 target.getCustomMap().each { key, targetValue ->
                     if (["Description", "Category", "Owner", "Enabled"].contains(key)) {
@@ -293,11 +296,6 @@ class InventoryComparer extends BeanComparer {
                 }
             }
 
-	    //["Description", "Category", "Owner", "Enabled"].each {  key ->
-            //    pair.getAttributes().add(new SyncAttributePair(key, source.getCustomData(key), target.getCustomData(key)))
-            //}
-            // List<SyncAttributePair> attrs = mergeAttributes(source?.getCustomMap(), target?.getCustomMap())
-            // pair.getAttributes().addAll(attrs)
             if (pair.getChangeType()==ChangeType.EQUALS) { 
                 for (SyncAttributePair attr : pair.getAttributes()) {
                     if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
@@ -403,14 +401,17 @@ for xml path('ServerInfo')
 
 
         def conn = connector.getJdbcConnection(null)
-        Statement statement = conn.createStatement()
-        ResultSet rs = statement.executeQuery(query)
-        String serverInfoXML = ""
-        if (rs.next()) {
-             serverInfoXML = rs.getString("ServerInfo")
+        DatabaseMetaData meta = conn.getMetaData()
+        String serverInfoXML = "<ServerInfo><Version>SQL 2000 is not supported</Version><Configuration></Configuration><Properties></Properties><SysInfo></SysInfo></ServerInfo>"
+        if (meta.getDatabaseMajorVersion() > 8) {  // TODO Add warning that SQL 200 is not supported 
+           Statement statement = conn.createStatement()
+           ResultSet rs = statement.executeQuery(query)
+           if (rs.next()) {
+              serverInfoXML = rs.getString("ServerInfo")
+           }
+           rs.close()
+           conn.close()
         }
-        rs.close()
-        conn.close()
         return serverInfoXML
     }
 }
@@ -473,7 +474,7 @@ class InventorySyncSession extends SyncSession {
             DatabaseConnection source = (DatabaseConnection)pair.getSource();
             DatabaseConnection target = (DatabaseConnection)pair.getTarget();
             target.setCustomData("ServerInfo", source.getCustomData("ServerInfo"))
-	    connectionSrv.updateConnection(target)
+            connectionSrv.updateConnection(target)
             pair.getChildren().each { importChanges(it) }
         } else if (objectType.equals("Database")) {
             Database     sourceDB = (Database)pair.getSource();
@@ -549,8 +550,9 @@ class InventorySyncSession extends SyncSession {
                             sourceJob.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
                         }
                     }
-                    sourceJob.setCustomData(Database.DELETED, false);
-                    inventorySrv.saveJob(sourceJob);
+                    sourceJob.setCustomData("JobDefinition",  targetJob.getCustomData("JobDefinition"))
+                    sourceJob.setCustomData(Database.DELETED, false)
+                    inventorySrv.saveJob(sourceJob)
                     break;
                 case ChangeType.DELETED:
                     inventorySrv.deleteJob(sourceJob.getId());
