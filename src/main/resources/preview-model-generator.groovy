@@ -9,7 +9,7 @@ import com.branegy.dbmaster.model.ForeignKey.ColumnMapping;
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
 
-class PreviewGenerator {
+public class PreviewGenerator  implements SummaryGenerator {
     def colors = [
         "EQUALS"   : "",
         "NEW"      : "rgb(109, 241, 6)" ,
@@ -22,10 +22,23 @@ class PreviewGenerator {
     private showChangesOnly;
     private Set<String> longText;
    
+    public PreviewGenerator() {
+    }
+
     public PreviewGenerator(boolean showChangesOnly) {
         this.showChangesOnly = showChangesOnly;
     }
      
+    public String generateSummary(SyncPair pair) {
+        sb = new StringBuilder(100*1024)
+        dumpItem(0, pair)
+        return sb.toString()    
+    }
+   
+    public String generateSummary(SyncSession session) {
+        return generatePreview(session)    
+    }
+
     public synchronized String generatePreview(SyncSession session) {
         sb = new StringBuilder(5*1024*1024);
         String longTextString = session.getParameter("longText");
@@ -33,6 +46,12 @@ class PreviewGenerator {
             : Arrays.asList(longTextString.split(";")) as Set;
         dumpItem(0, session.getSyncResult());
         return sb.toString();
+    }
+    
+    public void setParameter(String parameterName, Object value) {
+        if (parameterName.equals(SHOW_CHANGES_ONLY)) {
+            showChangesOnly = (Boolean)value;
+        }
     }
     
     public String getType(Object o) {
@@ -536,7 +555,9 @@ class PreviewGenerator {
     }
 }
 
-htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
-if (!showChangesOnly){ // save for diff only
-    syncSession.setParameter("html", htmlPreview); // TODO subject to change
-}
+//htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
+//if (!showChangesOnly){ // save for diff only
+//    syncSession.setParameter("html", htmlPreview); // TODO subject to change
+//}
+
+summaryGenerator = new PreviewGenerator()
