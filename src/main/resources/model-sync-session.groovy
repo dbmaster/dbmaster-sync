@@ -371,21 +371,42 @@ targetParameter?.getDefaultValue()))
         }
         
         Collection<String> keys = session.getParameter("customFieldMap").get(objectType);
-        if (keys != null){
-           if (pair.getSource() == null && pair.getTarget() != null){
-               for (String key:keys){
-                   pair.getAttributes().add(new SyncAttributePair(key,null, pair.getTarget().getCustomData(key)));
-               }
-           } else if (pair.getSource() != null && pair.getTarget() == null){
-               for (String key:keys){
-                   pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),null));
-               }
-           } else {
-               for (String key:keys){
-                   pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),
-                       pair.getTarget().getCustomData(key)));
-               }
-           }
+        if (keys==null) {
+            keys = Collections.emptyList();
+        }
+        if (pair.getSource() == null && pair.getTarget() != null){
+            for (String key:keys){
+                pair.getAttributes().add(new SyncAttributePair(key,null, pair.getTarget().getCustomData(key)));
+            }
+            pair.getTarget().forEachCustomData({key,v->
+                if (key.startsWith("ep:") && !keys.contains(key)) {
+                    pair.getAttributes().add(new SyncAttributePair(key,null, pair.getTarget().getCustomData(key)));
+                }
+            }); 
+        } else if (pair.getSource() != null && pair.getTarget() == null){
+            for (String key:keys){
+                pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),null));
+            }
+            pair.getSource().forEachCustomData({key,v->
+                if (key.startsWith("ep:") && !keys.contains(key)) {
+                    pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),null));
+                }
+            });
+        } else {
+            for (String key:keys){
+                pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),
+                                                                   pair.getTarget().getCustomData(key)));
+            }
+            
+            def allKeys = [] as LinkedHashSet;
+            allKeys.addAll(pair.getSource().getCustomMap().keySet());
+            allKeys.addAll(pair.getTarget().getCustomMap().keySet());
+            allKeys.forEach({key->
+                if (key.startsWith("ep:") && !keys.contains(key)) {
+                    pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),
+                                                                       pair.getTarget().getCustomData(key)));
+                }
+            });
         }
     }
 }
@@ -424,14 +445,15 @@ class ModelSyncSession extends SyncSession {
         String objectType = pair.getObjectType();
         
         Collection<String> keys = getParameter("customFieldMap").get(objectType);
-        if (keys!=null){
-            DatabaseObject source = pair.getSource();
-            if (pair.getChangeType() == ChangeType.CHANGED){
-                for (SyncAttributePair attr : pair.getAttributes()) {
-                    if (attr.getChangeType() != SyncAttributePair.AttributeChangeType.EQUALS &&
-                            keys.contains(attr.getAttributeName())) {
-                        source.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
-                    }
+        if (keys == null) {
+            keys = Collections.emptyList();
+        }
+        DatabaseObject source = pair.getSource();
+        if (pair.getChangeType() == ChangeType.CHANGED){
+            for (SyncAttributePair attr : pair.getAttributes()) {
+                if (attr.getChangeType() != SyncAttributePair.AttributeChangeType.EQUALS &&
+                        (keys.contains(attr.getAttributeName()) || attr.getAttributeName().startsWith("ep:"))) {
+                    source.setCustomData( attr.getAttributeName(), attr.getTargetValue())
                 }
             }
         }
