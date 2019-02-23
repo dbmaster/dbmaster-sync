@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.impl.*
 import com.branegy.dbmaster.sync.impl.BeanComparer.MergeKeySupplier;
+import com.branegy.persistence.custom.BaseCustomEntity
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
 import com.branegy.dbmaster.database.api.ModelService
 import com.branegy.scripting.DbMaster
@@ -378,35 +379,41 @@ targetParameter?.getDefaultValue()))
             for (String key:keys){
                 pair.getAttributes().add(new SyncAttributePair(key,null, pair.getTarget().getCustomData(key)));
             }
-            pair.getTarget().forEachCustomData({key,v->
-                if (key.startsWith("ep:") && !keys.contains(key)) {
-                    pair.getAttributes().add(new SyncAttributePair(key,null, pair.getTarget().getCustomData(key)));
-                }
-            }); 
+            if (pair.getTarget() instanceof BaseCustomEntity) {
+                pair.getTarget().forEachCustomData({key,v->
+                    if (key.startsWith("ep:") && !keys.contains(key)) {
+                        pair.getAttributes().add(new SyncAttributePair(key,null, pair.getTarget().getCustomData(key)));
+                    }
+                }); 
+            }
         } else if (pair.getSource() != null && pair.getTarget() == null){
             for (String key:keys){
                 pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),null));
             }
-            pair.getSource().forEachCustomData({key,v->
-                if (key.startsWith("ep:") && !keys.contains(key)) {
-                    pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),null));
-                }
-            });
+            if (pair.getSource() instanceof BaseCustomEntity) {
+                pair.getSource().forEachCustomData({key,v->
+                    if (key.startsWith("ep:") && !keys.contains(key)) {
+                        pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),null));
+                    }
+                });
+            }
         } else {
             for (String key:keys){
                 pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),
                                                                    pair.getTarget().getCustomData(key)));
             }
             
-            def allKeys = [] as LinkedHashSet;
-            allKeys.addAll(pair.getSource().getCustomMap().keySet());
-            allKeys.addAll(pair.getTarget().getCustomMap().keySet());
-            allKeys.forEach({key->
-                if (key.startsWith("ep:") && !keys.contains(key)) {
-                    pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),
-                                                                       pair.getTarget().getCustomData(key)));
-                }
-            });
+            if (pair.getSource() instanceof BaseCustomEntity && pair.getTarget() instanceof BaseCustomEntity) {
+                def allKeys = [] as LinkedHashSet;
+                allKeys.addAll(pair.getSource().getCustomMap().keySet());
+                allKeys.addAll(pair.getTarget().getCustomMap().keySet());
+                allKeys.forEach({key->
+                    if (key.startsWith("ep:") && !keys.contains(key)) {
+                        pair.getAttributes().add(new SyncAttributePair(key,pair.getSource().getCustomData(key),
+                                                                           pair.getTarget().getCustomData(key)));
+                    }
+                });
+            }
         }
     }
 }
