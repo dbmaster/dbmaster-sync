@@ -21,8 +21,7 @@ import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.impl.*
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
 import com.branegy.dbmaster.connection.ConnectionProvider
-import com.branegy.dbmaster.connection.Connector
-import com.branegy.dbmaster.connection.Dialect
+import com.branegy.dbmaster.connection.JdbcDialect
 import com.branegy.dbmaster.core.Permission.Role
 import com.branegy.dbmaster.core.Project
 import com.branegy.dbmaster.model.DatabaseInfo
@@ -137,13 +136,12 @@ class InventoryComparer extends BeanComparer {
                     public Object call()  throws Exception {
                         DatabaseConnection connection = it
                         String name = it.name
-                        def dialect 
+                        JdbcDialect dialect = null;
                         try {
-                            Connector connector = ConnectionProvider.getConnector(connection)
-                            dialect = connector.connect()
+                            dialect = ConnectionProvider.get().getDialect(connection)
                             def databases = dialect.getDatabases()
                             def jobs = dialect.getJobs()
-                            def serverInfo = getServerInfo(connector)
+                            def serverInfo = getServerInfo(dialect)
                             return new ConnectionResult(databases, jobs, dialect.isCaseSensitive(), serverInfo)
                         } catch (Exception e) {
                             logger.error("Cannot log sql server info {}", e);
@@ -151,11 +149,7 @@ class InventoryComparer extends BeanComparer {
                             session.logger.error(errorMsg)
                             return e
                         } finally {
-                            try {
-                                dialect?.close();
-                            } catch (Exception e) {
-                                logger.debug("Error while losing connection", e);
-                            }
+                            dialect?.close();
                         }
                     }
                 })    
@@ -164,7 +158,6 @@ class InventoryComparer extends BeanComparer {
         } else if (objectType.equals("Server")) {
             DatabaseConnection sourceServer = (DatabaseConnection)pair.getSource()
             DatabaseConnection targetServer = (DatabaseConnection)pair.getTarget()
-            Dialect dialect = null
             List<SyncPair> childPairs = pair.getChildren()
             def sourceDatabases = inventoryDBs.get(sourceServer.getName())
             def targetDatabases = null
@@ -252,10 +245,6 @@ class InventoryComparer extends BeanComparer {
                         //sourceJobs = new ArrayList()
                         //targetJobs = new ArrayList()
                         logger.warn("Can not get sql server info", e.getCause())
-                    } finally {
-                        if (dialect!=null){
-                            dialect.close();
-                        }
                     }
                 }           
         } else if (objectType.equals("Database")) {
@@ -318,7 +307,7 @@ class InventoryComparer extends BeanComparer {
         }
     }
 
-    private String getServerInfo(Connector connector) {
+    private String getServerInfo(JdbcDialect dialect) {
         
 String query = """
 select
@@ -400,17 +389,22 @@ for xml path('ServerInfo')
 """
 
 
-        def conn = connector.getJdbcConnection(null)
+        def conn = dialect.getConnection()
         DatabaseMetaData meta = conn.getMetaData()
         String serverInfoXML = "<ServerInfo><Version>SQL 2000 is not supported</Version><Configuration></Configuration><Properties></Properties><SysInfo></SysInfo></ServerInfo>"
-        if (meta.getDatabaseMajorVersion() > 8) {  // TODO Add warning that SQL 200 is not supported 
-           Statement statement = conn.createStatement()
-           ResultSet rs = statement.executeQuery(query)
-           if (rs.next()) {
-              serverInfoXML = rs.getString("ServerInfo")
+        if (meta.getDatabaseMajorVersion() > 8) {  // TODO Add warning that SQL 200 is not supported
+           Statement statement = null;
+           ResultSet rs = null;
+           try {
+               statement = conn.createStatement()
+               rs = statement.executeQuery(query)
+               if (rs.next()) {
+                  serverInfoXML = rs.getString("ServerInfo")
+               }
+           } finally {
+               com.branegy.util.IOUtils.closeQuietly(rs);
+               com.branegy.util.IOUtils.closeQuietly(statement);
            }
-           rs.close()
-           conn.close()
         }
         return serverInfoXML
     }
