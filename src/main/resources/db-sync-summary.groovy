@@ -94,10 +94,9 @@ public class PreviewGenerator implements SummaryGenerator {
                     sb.append("Error:"  + errorStatus.syncPair.error)
                 } else {
                     sb.append("<ul style=\"margin:0px;\" >");
-                    def hasChanges = (pair.getAttributes().find { it.changeType != AttributeChangeType.EQUALS } != null) 
-                    if (hasChanges) {
+                    if (pair.isAttributeChanges()) {
                         sb.append("<li>Change(s) in parameters/configuration/sysinfo</li>");
-                        printAttributeDiff(pair)
+                        printAttributeDiff(pair,1)
                     }
                     for (SyncPair child : pair.getChildren()) {
                         if (child.changeType == ChangeType.CHANGED) {
@@ -144,14 +143,48 @@ public class PreviewGenerator implements SummaryGenerator {
                 }
             }
         } else if (type.equals("Database")) {
-            printAttributeDiff(pair)
+            printAttributeDiff(pair,1)
+            if (pair.isChildrenChanges()) {
+                sb.append("<ul>");
+                for (SyncPair child : pair.getChildren()) {
+                    if (child.changeType == ChangeType.CHANGED) {
+                        String childType = child.objectType
+                        if (childType.equals("File")) {
+                            sb.append("<li>File " + child.sourceName + " changed</li>")
+                        }
+                        printSyncPair(child)
+                    }
+                }
+                def deletedFiles = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "File" }
+                def newFiles = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "File" }
+              
+                if (deletedFiles.size()==1) {
+                    sb.append("<li>File "+deletedFiles[0].sourceName + " was deleted</li>")
+                }
+                if (deletedFiles.size()>1) {
+                    sb.append("<li>"+deletedFiles.size()+" files were removed: "+deletedFiles.collect{it.sourceName}.join(", ")+"</li>")
+                }
+                if (newFiles.size()==1) {
+                    sb.append("<li>File "+newFiles[0].targetName + " was added</li>")
+                }
+                if (newFiles.size()>1) {
+                    sb.append("<li>"+newFiles.size()+" files added: "+newFiles.collect{it.targetName}.join(", ")+"</li>")
+                }
+                sb.append("</ul>");
+            }
+        } else if (type.equals("File")) {
+            printAttributeDiff(pair,2)
         } else if (type.equals("Job")) {
-            printAttributeDiff(pair)
+            printAttributeDiff(pair,1)
         }
     }
     
-    private void printAttributeDiff(SyncPair pair) {
-        sb.append("<ul style=\"list-style-type: square;margin-left: 1em;\">")
+    private void printAttributeDiff(SyncPair pair, int depth) {
+        if (!pair.isAttributeChanges()) {
+            return;
+        }
+        
+        sb.append("<ul style=\"list-style-type: square;\">")
 
         for (SyncAttributePair attribute: pair.getAttributes()) {
             def change = attribute.getChangeType()

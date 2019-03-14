@@ -473,19 +473,9 @@ class InventorySyncSession extends SyncSession {
         } 
     }
     
-    private void setLastSyncDate(SyncPair pair) {
-        if (pair.getTarget() instanceof BaseCustomEntity) {
-            pair.getTarget().setCustomData("Last Sync Date", lastSyncDate);
-        }
-        for (SyncPair child:pair.getChildren()) {
-            setLastSyncDate(child);
-        }
-    }
-
     public void importChanges(SyncPair pair) {
         String objectType = pair.getObjectType();
         if (objectType.equals("Inventory")) {
-            setLastSyncDate(pair)
             pair.getChildren().each {
                 importChanges(it)
             }
@@ -493,6 +483,7 @@ class InventorySyncSession extends SyncSession {
             DatabaseConnection source = (DatabaseConnection)pair.getSource();
             DatabaseConnection target = (DatabaseConnection)pair.getTarget();
             target.setCustomData("ServerInfo", source.getCustomData("ServerInfo"))
+            target.setCustomData("Last Sync Date", lastSyncDate);
             connectionSrv.updateConnection(target)
             pair.getChildren().each { importChanges(it) }
         } else if (objectType.equals("Database")) {
@@ -514,6 +505,7 @@ class InventorySyncSession extends SyncSession {
                         }
                     }
                     db.setCustomData("DatabaseDefinition", targetDB.getCustomData("DatabaseDefinition"));
+                    db.setCustomData("Last Sync Date", lastSyncDate);
                     
                     if (db.isPersisted()) {
                         inventorySrv.updateDatabase(db)
@@ -528,6 +520,7 @@ class InventorySyncSession extends SyncSession {
                         }
                     }
                     sourceDB.setCustomData("DatabaseDefinition", targetDB.getCustomData("DatabaseDefinition"));
+                    sourceDB.setCustomData("Last Sync Date", lastSyncDate);
                     inventorySrv.updateDatabase(sourceDB);
                     break;
                 case ChangeType.DELETED:
@@ -535,7 +528,9 @@ class InventorySyncSession extends SyncSession {
                     break;                    
                 case ChangeType.COPIED:
                     throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
-                case ChangeType.EQUALS:                
+                case ChangeType.EQUALS: 
+                    sourceDB.setCustomData("Last Sync Date", lastSyncDate);
+                    inventorySrv.updateDatabase(sourceDB);
                     break;
                 default:
                     throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
@@ -553,6 +548,7 @@ class InventorySyncSession extends SyncSession {
                     //    db.setDatabaseName(targetDB.getName())
                     targetJob.setServerName(serverName)
                     targetJob.setCustomData(Database.DELETED, false);
+                    targetJob.setCustomData("Last Sync Date", lastSyncDate);
                     //}
                     // TODO(Restore operation)db.setCustomData(Database.DELETED, false);
                     //for (SyncAttributePair attr : pair.getAttributes()) {
@@ -573,6 +569,7 @@ class InventorySyncSession extends SyncSession {
                         }
                     }
                     sourceJob.setCustomData("JobDefinition",  targetJob.getCustomData("JobDefinition"))
+                    sourceJob.setCustomData("Last Sync Date", lastSyncDate);
                     sourceJob.setCustomData(Database.DELETED, false)
                     inventorySrv.saveJob(sourceJob)
                     break;
@@ -581,7 +578,9 @@ class InventorySyncSession extends SyncSession {
                     break;                    
                 case ChangeType.COPIED:
                     throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
-                case ChangeType.EQUALS:                
+                case ChangeType.EQUALS: 
+                    sourceJob.setCustomData("Last Sync Date", lastSyncDate);
+                    inventorySrv.saveJob(sourceJob)
                     break;
                 default:
                     throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
