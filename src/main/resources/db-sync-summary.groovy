@@ -90,11 +90,8 @@ public class PreviewGenerator implements SummaryGenerator {
         } else if (type.equals("Server")) {
             def errorStatus = pair.getErrorStatus()
             if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE || change != ChangeType.EQUALS) {
-           //     sb.append("<tr valign=\"bottom\"><td style=\"margin:3px; vertical-align:top\">").append(pair.sourceName).append("</td><td style=\"margin:3px;vertical-align:top\">")
                 if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE) {
                     sb.append("Error:"  + errorStatus.syncPair.error)
-            //    } else if (change == ChangeType.EQUALS) {
-            //        sb.append("No changes found")                
                 } else {
                     sb.append("<ul style=\"margin:0px;\" >");
                     def hasChanges = (pair.getAttributes().find { it.changeType != AttributeChangeType.EQUALS } != null) 
