@@ -41,6 +41,9 @@ import com.branegy.dbmaster.sync.api.SyncSession.SearchTarget
 import com.branegy.dbmaster.sync.api.SyncService
 import com.branegy.service.core.search.CustomCriterion
 import com.branegy.service.core.search.CustomCriterion.Operator
+
+import groovy.util.slurpersupport.NodeChild
+
 import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType
 
 class InventoryNamer implements Namer {
@@ -52,6 +55,7 @@ class InventoryNamer implements Namer {
         } else if (o instanceof Job)      {            return ((Job)o).getJobName();
         } else if (o instanceof DatabaseInfo) {        return ((DatabaseInfo)o).getName();
         } else if (o instanceof NamedObject) {         return ((NamedObject)o).name;
+        } else if (o instanceof NodeChild) {           return ((NodeChild)o).name;
         } else {
             throw new IllegalArgumentException("Unexpected object class "+o);
         }
@@ -65,6 +69,7 @@ class InventoryNamer implements Namer {
         } else if (o instanceof Database) {            return "Database";
         } else if (o instanceof DatabaseInfo) {        return "Database";
         } else if (o instanceof NamedObject) {         return ((NamedObject)o).type;
+        } else if (o instanceof NodeChild) {           return ((NodeChild)o).name();
         } else {
             throw new IllegalArgumentException("Unexpected object class "+o);
         }
@@ -198,13 +203,6 @@ class InventoryComparer extends BeanComparer {
 
                         List<SyncAttributePair> attrs = mergeAttributes(localAttrs, remoteAttrs, true)
                         pair.getAttributes().addAll(attrs)
-                        if (pair.getChangeType()==ChangeType.EQUALS) {
-                            for (SyncAttributePair attr : pair.getAttributes()) {
-                                if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
-                                    pair.setChangeType(ChangeType.CHANGED)
-                                }
-                            }
-                        }
 
                         targetJobs = new ArrayList(result.jobs)
                         targetJobs.each { 
@@ -250,13 +248,42 @@ class InventoryComparer extends BeanComparer {
         } else if (objectType.equals("Database")) {
             Database sourceDB = (Database)pair.getSource();
             DatabaseInfo targetDB = (DatabaseInfo)pair.getTarget();
-            if (targetDB!=null) {
-                targetDB.getCustomMap().each { key, targetValue ->
-                    if (!key.equals("Create Date")) {
-                        def sourceValue = sourceDB==null ? null : sourceDB.getCustomData(key)
-                        pair.getAttributes().add(new SyncAttributePair(key, sourceValue, targetValue))
+           
+            def slurper = new XmlSlurper()
+            
+            def sourceAttrs = new HashMap<String, Object>(100)
+            def sourceFiles = new ArrayList(100);
+            if (sourceDB!=null) {
+                String sourceDbDef = sourceDB.getCustomData("DatabaseDefinition");
+                if (sourceDbDef!=null) {
+                    def sourceDbInfo = slurper.parseText(sourceDbDef)
+                    sourceDbInfo.Properties.children().each { config ->
+                        sourceAttrs.put("Property." + config.name(), config.text());
+                    }
+                    sourceFiles = sourceDbInfo.Files.children().list();
                 }
             }
+            def targetAttrs = new HashMap<String, Object>(100)
+            def targetFiles = new ArrayList(100);
+            if (targetDB!=null) {
+                String targetDbDef = targetDB.getCustomData("DatabaseDefinition");
+                if (targetDbDef!=null) {
+                    def targetDbInfo = slurper.parseText(targetDbDef)
+                    targetDbInfo.Properties.children().each { config ->
+                        targetAttrs.put("Property." + config.name(), config.text());
+                    }
+                    targetFiles = targetDbInfo.Files.children().list();
+                }
+            }
+            pair.getAttributes().addAll(mergeAttributes(sourceAttrs, targetAttrs, true));
+            pair.getChildren().addAll(mergeCollections(pair, sourceFiles, targetFiles, namer))
+            
+            if (targetDB!=null) {
+                targetDB.getCustomMap().each { key, targetValue ->
+                    if (!["Create Date","DatabaseDefinition"].contains(key)) {
+                        pair.getAttributes().add(new SyncAttributePair(key, sourceDB?.getCustomData(key), targetValue))
+                    }
+                }
             }
         } else if (objectType.equals("Job")) {
             Job source = (Job)pair.getSource()
@@ -284,24 +311,22 @@ class InventoryComparer extends BeanComparer {
                     }
                 }
             }
-
-            if (pair.getChangeType()==ChangeType.EQUALS) { 
-                for (SyncAttributePair attr : pair.getAttributes()) {
-                    if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
-                        pair.setChangeType(ChangeType.CHANGED)
-                    }
-                }
-            }
         } else if (objectType.equals("USER")) {
             NamedObject source = (NamedObject)pair.getSource();
             NamedObject target = (NamedObject)pair.getTarget();
-            List<SyncAttributePair> attrs = mergeAttributes(source.getCustomMap(), target.getCustomMap());
-            pair.getAttributes().addAll(attrs);
-            for (SyncAttributePair attr : attrs) {
-                if (attr.getChangeType()!=AttributeChangeType.EQUALS) {
-                    pair.setChangeType(ChangeType.CHANGED);
-                }
-            }
+            pair.getAttributes().addAll(mergeAttributes(source.getCustomMap(), target.getCustomMap()));
+        } else if (objectType.equals("File")) {
+            
+            NodeChild source = (NodeChild)pair.getSource();
+            NodeChild target = (NodeChild)pair.getTarget();
+            
+            Map<String,String> sourceAttrs = new LinkedHashMap<>();
+            source?.children().each{p -> sourceAttrs.put(p.name(),p.text())};
+            
+            Map<String,String> targetAttrs = new LinkedHashMap<>();
+            target?.children().each{p -> targetAttrs.put(p.name(),p.text())};
+            
+            pair.getAttributes().addAll(mergeAttributes(sourceAttrs, targetAttrs));
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
         }
@@ -480,7 +505,7 @@ class InventorySyncSession extends SyncSession {
                     if (db == null){
                         db = new Database()
                         db.setDatabaseName(targetDB.getName())
-                        db.setServerName(serverName)
+                        db.setConnectionName(serverName)
                     }
                     db.setCustomData(Database.DELETED, false);
                     for (SyncAttributePair attr : pair.getAttributes()) {
@@ -488,6 +513,8 @@ class InventorySyncSession extends SyncSession {
                             db.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
                         }
                     }
+                    db.setCustomData("DatabaseDefinition", targetDB.getCustomData("DatabaseDefinition"));
+                    
                     if (db.isPersisted()) {
                         inventorySrv.updateDatabase(db)
                     } else {
@@ -500,6 +527,7 @@ class InventorySyncSession extends SyncSession {
                             sourceDB.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
                         }
                     }
+                    sourceDB.setCustomData("DatabaseDefinition", targetDB.getCustomData("DatabaseDefinition"));
                     inventorySrv.updateDatabase(sourceDB);
                     break;
                 case ChangeType.DELETED:

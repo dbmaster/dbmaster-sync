@@ -6,7 +6,7 @@ import com.branegy.dbmaster.sync.api.*;
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType;
 import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType;
 
-class PreviewGenerator{
+class PreviewGenerator implements SummaryGenerator{
     def changePairClass = [
         "new",
         "changed",
@@ -30,6 +30,22 @@ class PreviewGenerator{
     public PreviewGenerator(boolean showChangesOnly) {
         this.showChangesOnly = showChangesOnly;
     }
+    
+    public PreviewGenerator() {
+    }
+    
+    public String generateSummary(SyncSession session) {
+        String longTextString = session.getParameter("longText");
+        longText = longTextString == null ? Collections.emptySet()
+             : Arrays.asList(longTextString.split(";")) as Set;
+        
+        return generatePreview(session.getSyncResult())
+    }
+    
+    public String generateSummary(SyncPair pair) {
+       return generatePreview(pair);
+    }
+   
      
     public synchronized String generatePreview(SyncSession session) {
         sb = new StringBuilder(100*1024);
@@ -57,6 +73,43 @@ class PreviewGenerator{
         sb.append("</script>");
         
         SyncPair pair = session.getSyncResult();
+        queue.addLast(pair);
+        while (!queue.isEmpty()){
+            SyncPair p = queue.removeFirst();
+            printScreen(p);
+            if (p.isChildren()){
+                p.getChildren().sort{syncPairSorter};
+                for (SyncPair p2:p.getChildren()){
+                   if (p2.isChildrenChanges() || p2.isAttributeChanges()){
+                       queue.addLast(p2);
+                   } 
+                }
+            }
+        }
+        return sb.toString();
+    }
+    
+    public synchronized String generatePreview(SyncPair pair) {
+        sb = new StringBuilder(100*1024);
+        sb.append("""<script type="text/javascript">""");
+        sb.append("""
+                     var f = function(event){
+                         event = event || window.event;
+                         var target = event.target || event.srcElement;
+                         if (target.tagName == "A"){
+                             window.location.hash = target.href.substring(target.href.lastIndexOf('#'));
+                         }
+                         event.preventDefault ? event.preventDefault() : (event.returnValue=false);
+                         return false;
+                     }
+                     if(window.addEventListener){
+                         window.addEventListener("click",f,false);
+                     } else {
+                         window.attachEvent("onclick",f);
+                     }
+        """);
+        sb.append("</script>");
+        
         queue.addLast(pair);
         while (!queue.isEmpty()){
             SyncPair p = queue.removeFirst();
@@ -256,6 +309,12 @@ class PreviewGenerator{
         return o==null ? "" : o.getClass().getName()
     }
     
+    public void setParameter(String parameterName, Object value) {
+        if (parameterName.equals(SHOW_CHANGES_ONLY)) {
+            showChangesOnly = (Boolean)value;
+        }
+    }
+    
     static class PreviewComparatorByTarget implements Comparator<SyncPair>{
         @Override
         public int compare(SyncPair a, SyncPair b) {
@@ -319,7 +378,9 @@ class PreviewGenerator{
     def syncPairSorter = new PreviewComparatorByTarget();
 }
 
-htmlPreview = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
+/*summaryGenerator = new PreviewGenerator(showChangesOnly).generatePreview(syncSession);
 if (!showChangesOnly){ // save for diff only
     syncSession.setParameter("html", htmlPreview); // TODO subject to change
-}
+}*/
+
+summaryGenerator = new PreviewGenerator()
