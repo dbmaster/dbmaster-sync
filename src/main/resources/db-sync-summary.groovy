@@ -184,7 +184,7 @@ public class PreviewGenerator implements SummaryGenerator {
             return;
         }
         
-        sb.append("<ul style=\"list-style-type: square;\">")
+        sb.append("<ul style=\"list-style-type: square;margin-left:${depth}em\">")
 
         for (SyncAttributePair attribute: pair.getAttributes()) {
             def change = attribute.getChangeType()
