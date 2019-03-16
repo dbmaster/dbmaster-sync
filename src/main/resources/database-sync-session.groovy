@@ -498,12 +498,15 @@ class InventorySyncSession extends SyncSession {
                         db.setDatabaseName(targetDB.getName())
                         db.setConnectionName(serverName)
                     }
-                    db.setCustomData(Database.DELETED, false);
                     for (SyncAttributePair attr : pair.getAttributes()) {
+                        if (attr.getAttributeName().startsWith("Property.")) {
+                            continue;
+                        }
                         if (attr.getChangeType() != SyncAttributePair.AttributeChangeType.EQUALS) {
                             db.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
                         }
                     }
+                    db.setCustomData(Database.DELETED, false);
                     db.setCustomData("DatabaseDefinition", targetDB.getCustomData("DatabaseDefinition"));
                     db.setCustomData("Last Sync Date", lastSyncDate);
                     
@@ -515,6 +518,9 @@ class InventorySyncSession extends SyncSession {
                     break;
                 case ChangeType.CHANGED:
                     for (SyncAttributePair attr : pair.getAttributes()) {
+                        if (attr.getAttributeName().startsWith("Property.")) {
+                            continue;
+                        }
                         if (attr.getChangeType() != SyncAttributePair.AttributeChangeType.EQUALS) {
                             sourceDB.setCustomData( attr.getAttributeName(), attr.getTargetValue()  )
                         }
