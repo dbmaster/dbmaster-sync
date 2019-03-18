@@ -55,7 +55,17 @@ class InventoryNamer implements Namer {
         } else if (o instanceof Job)      {            return ((Job)o).getJobName();
         } else if (o instanceof DatabaseInfo) {        return ((DatabaseInfo)o).getName();
         } else if (o instanceof NamedObject) {         return ((NamedObject)o).name;
-        } else if (o instanceof NodeChild) {           return ((NodeChild)o).name;
+        } else if (o instanceof NodeChild) {       
+            NodeChild nc = (NodeChild)o;
+            String type = nc.name();
+            if (type == "Step") {
+                return /*nc.step_id + ". "+ */nc.step_name;
+            } else if (type == "Schedule") {
+                return nc.name;
+            } else if (type == "File") {
+                return nc.name;
+            }
+            throw new IllegalArgumentException("Unexpected object NodeChild "+type);
         } else {
             throw new IllegalArgumentException("Unexpected object class "+o);
         }
@@ -290,18 +300,40 @@ class InventoryComparer extends BeanComparer {
             Job target = (Job)pair.getTarget()
             def slurper = new XmlSlurper()
 
-            def localAttrs  = new HashMap<String, Object>(5)
-            def remoteAttrs = new HashMap<String, Object>(5)
-            def localDef    = slurper.parseText(source?.getCustomData("JobDefinition") ?: "<JobDefinition />")
-            def remoteDef   = slurper.parseText(target?.getCustomData("JobDefinition") ?: "<JobDefinition />")
-
-            remoteDef.children().each { attribute ->
-                if (attribute.children().size()==0) remoteAttrs.put(attribute.name(),attribute.text())
+            def localAttrs = Collections.emptyMap()
+            def localSteps = Collections.emptyList()
+            def localSchedules = Collections.emptyList()
+            if (source!=null) {
+                String jobDefinision = source.getCustomData("JobDefinition");
+                if (jobDefinision!=null) {
+                    def localDef = slurper.parseText(jobDefinision)
+                    localAttrs  = new HashMap<String, Object>(5)
+                    localDef.children().each { attribute ->
+                        if (attribute.children().size()==0) localAttrs.put(attribute.name(),attribute.text())
+                    }
+                    localSteps = localDef.Steps.children().list();
+                    localSchedules = localDef.Schedules.children().list();
+                }
             }
-            localDef.children().each { attribute ->
-                if (attribute.children().size()==0) localAttrs.put(attribute.name(),attribute.text())
+            def remoteAttrs = Collections.emptyMap()
+            def remoteSteps = Collections.emptyList()
+            def remoteSchedules = Collections.emptyList()
+            if (target != null) {
+                String jobDefinision = target.getCustomData("JobDefinition");
+                if (jobDefinision!=null) {
+                    def remoteDef = slurper.parseText(jobDefinision)
+                    remoteAttrs  = new HashMap<String, Object>(5)
+                    remoteDef.children().each { attribute ->
+                        if (attribute.children().size()==0) remoteAttrs.put(attribute.name(),attribute.text())
+                    }
+                    remoteSteps = remoteDef.Steps.children().list();
+                    remoteSchedules = remoteDef.Schedules.children().list();
+                }
             }
+            
             pair.getAttributes().addAll(mergeAttributes(localAttrs, remoteAttrs, true))
+            pair.getChildren().addAll(mergeLists(pair, localSteps, remoteSteps, namer))
+            pair.getChildren().addAll(mergeCollections(pair, localSchedules, remoteSchedules, namer))
             
             if (target!=null) {
                 target.getCustomMap().each { key, targetValue ->
@@ -315,7 +347,7 @@ class InventoryComparer extends BeanComparer {
             NamedObject source = (NamedObject)pair.getSource();
             NamedObject target = (NamedObject)pair.getTarget();
             pair.getAttributes().addAll(mergeAttributes(source.getCustomMap(), target.getCustomMap()));
-        } else if (objectType.equals("File")) {
+        } else if (objectType.equals("File") || objectType.equals("Step") || objectType.equals("Schedule")) {
             
             NodeChild source = (NodeChild)pair.getSource();
             NodeChild target = (NodeChild)pair.getTarget();
