@@ -219,10 +219,10 @@ public class PreviewGenerator implements SummaryGenerator {
                     sb.append("<li>"+deletedSchedules.size()+" schedules were removed: "+deletedSchedules.collect{it.sourceName}.join(", ")+"</li>")
                 }
                 if (newSchedules.size()==1) {
-                    sb.append("<li>Schedule "+deletedSchedules[0].targetName + " was added</li>")
+                    sb.append("<li>Schedule "+newSchedules[0].targetName + " was added</li>")
                 }
                 if (newSchedules.size()>1) {
-                    sb.append("<li>"+deletedSchedules.size()+" schedules added: "+deletedSchedules.collect{it.targetName}.join(", ")+"</li>")
+                    sb.append("<li>"+newSchedules.size()+" schedules added: "+newSchedules.collect{it.targetName}.join(", ")+"</li>")
                 }
                 
                 sb.append("</ul>");
