@@ -309,7 +309,10 @@ class InventoryComparer extends BeanComparer {
                     def localDef = slurper.parseText(jobDefinision)
                     localAttrs  = new HashMap<String, Object>(5)
                     localDef.children().each { attribute ->
-                        if (attribute.children().size()==0) localAttrs.put(attribute.name(),attribute.text())
+                        if (["Steps","Schedules"].contains(attribute.name())) {
+                            return;
+                        }
+                        localAttrs.put(attribute.name(),attribute.text())
                     }
                     localSteps = localDef.Steps.children().list();
                     localSchedules = localDef.Schedules.children().list();
@@ -324,7 +327,10 @@ class InventoryComparer extends BeanComparer {
                     def remoteDef = slurper.parseText(jobDefinision)
                     remoteAttrs  = new HashMap<String, Object>(5)
                     remoteDef.children().each { attribute ->
-                        if (attribute.children().size()==0) remoteAttrs.put(attribute.name(),attribute.text())
+                        if (["Steps","Schedules"].contains(attribute.name())) {
+                            return;
+                        }
+                        remoteAttrs.put(attribute.name(),attribute.text())
                     }
                     remoteSteps = remoteDef.Steps.children().list();
                     remoteSchedules = remoteDef.Schedules.children().list();
