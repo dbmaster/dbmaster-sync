@@ -174,8 +174,59 @@ public class PreviewGenerator implements SummaryGenerator {
             }
         } else if (type.equals("File")) {
             printAttributeDiff(pair,2)
+        } else if (type.equals("Step")) {
+            printAttributeDiff(pair,2)
+        } else if (type.equals("Schedule")) {
+            printAttributeDiff(pair,2)
         } else if (type.equals("Job")) {
             printAttributeDiff(pair,1)
+            if (pair.isChildrenChanges()) {
+                sb.append("<ul>");
+                for (SyncPair child : pair.getChildren()) {
+                    if (child.changeType == ChangeType.CHANGED) {
+                        String childType = child.objectType
+                        if (childType.equals("Step")) {
+                            sb.append("<li>Step " + child.sourceName + " changed</li>")
+                        } else if (childType.equals("Schedule")) {
+                            sb.append("<li>Schedule " + child.sourceName + " changed</li>")
+                        }
+                        printSyncPair(child)
+                    }
+                }
+                def deletedSteps = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Step" }
+                def newSteps = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Step" }
+              
+                if (deletedSteps.size()==1) {
+                    sb.append("<li>Step "+deletedSteps[0].sourceName + " was deleted</li>")
+                }
+                if (deletedSteps.size()>1) {
+                    sb.append("<li>"+deletedSteps.size()+" steps were removed: "+deletedSteps.collect{it.sourceName}.join(", ")+"</li>")
+                }
+                if (newSteps.size()==1) {
+                    sb.append("<li>Step "+newSteps[0].targetName + " was added</li>")
+                }
+                if (newSteps.size()>1) {
+                    sb.append("<li>"+newSteps.size()+" steps added: "+newSteps.collect{it.targetName}.join(", ")+"</li>")
+                }
+                
+                def deletedSchedules = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Schedule" }
+                def newSchedules = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Schedule" }
+              
+                if (deletedSchedules.size()==1) {
+                    sb.append("<li>Schedule "+deletedSteps[0].sourceName + " was deleted</li>")
+                }
+                if (deletedSchedules.size()>1) {
+                    sb.append("<li>"+deletedSteps.size()+" schedules were removed: "+deletedSteps.collect{it.sourceName}.join(", ")+"</li>")
+                }
+                if (newSchedules.size()==1) {
+                    sb.append("<li>Schedule "+newSteps[0].targetName + " was added</li>")
+                }
+                if (newSchedules.size()>1) {
+                    sb.append("<li>"+newSteps.size()+" schedules added: "+newSteps.collect{it.targetName}.join(", ")+"</li>")
+                }
+                
+                sb.append("</ul>");
+            }
         }
     }
     
