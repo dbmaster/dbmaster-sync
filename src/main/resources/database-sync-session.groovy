@@ -353,7 +353,7 @@ class InventoryComparer extends BeanComparer {
             NamedObject source = (NamedObject)pair.getSource();
             NamedObject target = (NamedObject)pair.getTarget();
             pair.getAttributes().addAll(mergeAttributes(source.getCustomMap(), target.getCustomMap()));
-        } else if (objectType.equals("File") || objectType.equals("Step") || objectType.equals("Schedule")) {
+        } else if (objectType.equals("File") || objectType.equals("Step")) {
             
             NodeChild source = (NodeChild)pair.getSource();
             NodeChild target = (NodeChild)pair.getTarget();
@@ -364,6 +364,25 @@ class InventoryComparer extends BeanComparer {
             Map<String,String> targetAttrs = new LinkedHashMap<>();
             target?.children().each{p -> targetAttrs.put(p.name(),p.text())};
             
+            pair.getAttributes().addAll(mergeAttributes(sourceAttrs, targetAttrs));
+        } else if (objectType.equals("Schedule")) {
+            
+            NodeChild source = (NodeChild)pair.getSource();
+            NodeChild target = (NodeChild)pair.getTarget();
+            
+            Map<String,String> sourceAttrs = Collections.emptyMap();
+            if (source != null) {
+                sourceAttrs = new LinkedHashMap<>(4);
+                sourceAttrs.put("Enabled", source.enabled.text());
+                sourceAttrs.put("Summary", SQLServerDialect.getScheduleSummary(source));
+            }
+            
+            Map<String,String> targetAttrs = Collections.emptyMap();
+            if (target != null) {
+                targetAttrs = new LinkedHashMap<>(4);
+                targetAttrs.put("Enabled", target.enabled.text());
+                targetAttrs.put("Summary", SQLServerDialect.getScheduleSummary(target));
+            }
             pair.getAttributes().addAll(mergeAttributes(sourceAttrs, targetAttrs));
         } else {
             throw new SyncException("Unexpected object type "+ objectType);
@@ -520,9 +539,24 @@ class InventorySyncSession extends SyncSession {
         } else if (objectType.equals("Server")) {
             DatabaseConnection source = (DatabaseConnection)pair.getSource();
             DatabaseConnection target = (DatabaseConnection)pair.getTarget();
-            target.setCustomData("ServerInfo", source.getCustomData("ServerInfo"))
-            target.setCustomData("Last Sync Date", lastSyncDate);
-            connectionSrv.updateConnection(target)
+            switch (pair.getChangeType()) {
+                case ChangeType.COPIED:
+                    throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
+                case ChangeType.NEW:
+                case ChangeType.CHANGED:
+                case ChangeType.EQUALS:
+                    if (pair.isSelected()) {
+                        target.setCustomData("ServerInfo", source.getCustomData("ServerInfo"))
+                        target.setCustomData("Last Sync Date", lastSyncDate);
+                        connectionSrv.updateConnection(target)
+                    }
+                    break;
+                case ChangeType.DELETED:
+                    /*if (pair.isSelected()) {
+                        connectionSrv.deleteConnection(source);
+                    }*/
+                    break;
+            }
             pair.getChildren().each { importChanges(it) }
         } else if (objectType.equals("Database")) {
             Database     sourceDB = (Database)pair.getSource();
