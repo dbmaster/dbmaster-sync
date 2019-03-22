@@ -77,13 +77,16 @@ public class PreviewGenerator implements SummaryGenerator {
                 // TODO Handle errors
             } else {
                 sb.append("<table class=\"simple-table\" cellspacing=\"0\" cellpadding=\"10\"><tr style=\"background-color:#EEE\"><td>Server</td><td>Change details</td></tr>")
-                for (SyncPair child : pair.getChildren()) {
-                    sb.append("<tr valign=\"bottom\"><td style=\"margin:3px; vertical-align:top\">")
-                      .append(child.sourceName)
-                      .append("</td><td style=\"margin:3px;vertical-align:top\">")
-                    printSyncPair(child)
-                    sb.append("</td></tr>")
-
+		def servers = pair.getChildren().sort { it.sourceName }
+                for (SyncPair server : servers) {
+                    def errorStatus = server.getErrorStatus()
+                    if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE || server.getChangeType()!=ChangeType.EQUALS) {
+                        sb.append("<tr valign=\"bottom\"><td style=\"margin:3px; vertical-align:top; white-space: nowrap\">")
+                          .append(server.sourceName)
+                          .append("</td><td style=\"margin:3px;vertical-align:top\">")
+                        printSyncPair(server)
+                        sb.append("</td></tr>")
+                    }
                 }
                 sb.append("</table>")
             }
@@ -107,19 +110,20 @@ public class PreviewGenerator implements SummaryGenerator {
                             if (childType.equals("Job")) {
                                 sb.append("<li>Job " + child.sourceName + " changed</li>")
                             }                            
+                            if (childType.equals("ServerPrincipal")) {
+                                sb.append("<li>Server principal " + child.sourceName + " changed</li>")
+                            }                            
                             printSyncPair(child)
                         }
                     }
-                    def deletedJobs = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Job" }
-                    def newJobs = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Job" }
-                    def newDbs  = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Database" }
                     def deletedDbs = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Database" }
                     if (deletedDbs.size()==1) {
                         sb.append("<li>Database "+deletedDbs[0].sourceName + " was deleted</li>")                    
                     }
                     if (deletedDbs.size()>1) {
-                        sb.append("<li>"+deletedDbs.size()+" databases were removed: "+deletedDbs.collect{it.sourceName}.join(", ")+"</li>")
+                        sb.append("<li>"+deletedDbs.size()+" databases were deleted: "+deletedDbs.collect{it.sourceName}.join(", ")+"</li>")
                     }
+                    def newDbs  = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Database" }
                     if (newDbs.size()==1) {
                         sb.append("<li>Database "+newDbs[0].targetName + " was added</li>")
                     }
@@ -127,6 +131,8 @@ public class PreviewGenerator implements SummaryGenerator {
                         sb.append("<li>"+newDbs.size()+" databases added: "+newDbs.collect{it.targetName}.join(", ")+"</li>")
                     }
 
+                    def newJobs = pair.children.findAll { it.changeType == ChangeType.NEW && it.objectType == "Job" }
+                    def deletedJobs = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "Job" }
                     if (deletedJobs.size()==1) {
                         sb.append("<li>Job "+deletedJobs[0].sourceName + " was deleted</li>")                    
                     }
@@ -138,12 +144,29 @@ public class PreviewGenerator implements SummaryGenerator {
                     }
                     if (newJobs.size()>1) {
                         sb.append("<li>"+newJobs.size()+" jobs added: "+newJobs.collect{it.targetName}.join(", ")+"</li>")
-                    }                
+                    }
+
+
+                    def deletedServerPrincipals = pair.children.findAll { it.changeType == ChangeType.DELETED && it.objectType == "ServerPrincipal" }
+                    if (deletedServerPrincipals.size()==1) {
+                        sb.append("<li>Principal "+deletedServerPrincipals[0].sourceName + " was deleted</li>")                    
+                    }
+                    if (deletedServerPrincipals.size()>1) {
+                        sb.append("<li>" + deletedServerPrincipals.size() + " princials were removed: " + deletedServerPrincipals.collect{it.sourceName}.join(", ")+"</li>")
+                    }
+
+                    def newServerPrincipals     = pair.children.findAll { it.changeType == ChangeType.NEW    && it.objectType == "ServerPrincipal" }
+                    if (newServerPrincipals.size()==1) {
+                        sb.append("<li>Principal "+newServerPrincipals[0].targetName + " was added</li>")
+                    }
+                    if (newServerPrincipals.size()>1) {
+                        sb.append("<li>" + newServerPrincipals.size()+" principals added: " + newServerPrincipals.collect{it.targetName}.join(", ")+"</li>")
+                    }
                     sb.append("</ul>");
                 }
             }
         } else if (type.equals("Database")) {
-            printAttributeDiff(pair,1)
+            printAttributeDiff(pair, 1)
             if (pair.isChildrenChanges()) {
                 sb.append("<ul>");
                 for (SyncPair child : pair.getChildren()) {
@@ -172,14 +195,16 @@ public class PreviewGenerator implements SummaryGenerator {
                 }
                 sb.append("</ul>");
             }
+        } else if (type.equals("ServerPrincipal")) {
+            printAttributeDiff(pair ,2)
         } else if (type.equals("File")) {
-            printAttributeDiff(pair,2)
+            printAttributeDiff(pair, 2)
         } else if (type.equals("Step")) {
-            printAttributeDiff(pair,2)
+            printAttributeDiff(pair, 2)
         } else if (type.equals("Schedule")) {
-            printAttributeDiff(pair,2)
+            printAttributeDiff(pair, 2)
         } else if (type.equals("Job")) {
-            printAttributeDiff(pair,1)
+            printAttributeDiff(pair, 1)
             if (pair.isChildrenChanges()) {
                 sb.append("<ul>");
                 for (SyncPair child : pair.getChildren()) {
@@ -200,7 +225,7 @@ public class PreviewGenerator implements SummaryGenerator {
                     sb.append("<li>Step "+deletedSteps[0].sourceName + " was deleted</li>")
                 }
                 if (deletedSteps.size()>1) {
-                    sb.append("<li>"+deletedSteps.size()+" steps were removed: "+deletedSteps.collect{it.sourceName}.join(", ")+"</li>")
+                    sb.append("<li>"+deletedSteps.size()+" steps were deleted: "+deletedSteps.collect{it.sourceName}.join(", ")+"</li>")
                 }
                 if (newSteps.size()==1) {
                     sb.append("<li>Step "+newSteps[0].targetName + " was added</li>")
@@ -216,15 +241,14 @@ public class PreviewGenerator implements SummaryGenerator {
                     sb.append("<li>Schedule "+deletedSchedules[0].sourceName + " was deleted</li>")
                 }
                 if (deletedSchedules.size()>1) {
-                    sb.append("<li>"+deletedSchedules.size()+" schedules were removed: "+deletedSchedules.collect{it.sourceName}.join(", ")+"</li>")
+                    sb.append("<li>"+deletedSchedules.size()+" schedules were deleted: "+deletedSchedules.collect{it.sourceName}.join(", ")+"</li>")
                 }
                 if (newSchedules.size()==1) {
                     sb.append("<li>Schedule "+newSchedules[0].targetName + " was added</li>")
                 }
                 if (newSchedules.size()>1) {
                     sb.append("<li>"+newSchedules.size()+" schedules added: "+newSchedules.collect{it.targetName}.join(", ")+"</li>")
-                }
-                
+                }                
                 sb.append("</ul>");
             }
         }

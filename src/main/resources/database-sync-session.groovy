@@ -28,6 +28,7 @@ import com.branegy.dbmaster.model.DatabaseInfo
 import com.branegy.inventory.api.InventoryService
 import com.branegy.inventory.model.Database
 import com.branegy.inventory.model.Job
+import com.branegy.inventory.model.SecurityObject
 import com.branegy.persistence.custom.BaseCustomEntity
 import com.branegy.service.connection.api.ConnectionService
 import com.branegy.service.connection.model.DatabaseConnection
@@ -64,8 +65,11 @@ class InventoryNamer implements Namer {
                 return nc.name;
             } else if (type == "File") {
                 return nc.name;
+            } else if (type == "ServerPrincipal") {
+                return nc.name;
             }
             throw new IllegalArgumentException("Unexpected object NodeChild "+type);
+        } else if (o instanceof SecurityObject) {      return ((SecurityObject)o).getCustomData("Name");
         } else {
             throw new IllegalArgumentException("Unexpected object class "+o);
         }
@@ -78,6 +82,7 @@ class InventoryNamer implements Namer {
         } else if (o instanceof Job) {                 return "Job";
         } else if (o instanceof Database) {            return "Database";
         } else if (o instanceof DatabaseInfo) {        return "Database";
+        } else if (o instanceof SecurityObject) {      return "ServerPrincipal";  // TODO Check if database is empty
         } else if (o instanceof NamedObject) {         return ((NamedObject)o).type;
         } else if (o instanceof NodeChild) {           return ((NodeChild)o).name();
         } else {
@@ -103,9 +108,9 @@ class ConnectionResult {
 class InventoryComparer extends BeanComparer {
     def inventoryDBs
     def inventoryJobs
+    def inventoryServerPrincipals
     Logger logger
     
-       
     Map<String,Future<Object>> connectionResults;
     final ExecutorService executor = new ThreadPoolExecutor(20, Integer.MAX_VALUE,
                                       20L, TimeUnit.SECONDS,
@@ -131,6 +136,10 @@ class InventoryComparer extends BeanComparer {
 
             inventoryJobs = session.inventorySrv
                             .getJobList(new QueryRequest("Deleted=no"))
+                            .groupBy { it.getServerName() }
+           
+            inventoryServerPrincipals = session.inventorySrv
+                            .getSecurityObjectList(new QueryRequest("Source=SqlServer && DatabaseName="))
                             .groupBy { it.getServerName() }
            
             def invConnections = []
@@ -210,6 +219,11 @@ class InventoryComparer extends BeanComparer {
                         targetServerInfo.Properties.Properties.children().each { p -> localAttrs.put("Property."+ p.name(), p.text()) }
                         targetServerInfo.SysInfo.SysInfo.children().each { p ->  localAttrs.put("SysInfo."+ p.name(), p.text()) }
                         localAttrs.put("Version", targetServerInfo.Version.text())
+
+                        def sourcePrincipals = inventoryServerPrincipals.get(sourceServer.getName())
+                        def targetPrincipals = remoteServerInfo.ServerPrincipals.children().list(); 
+
+                        pair.getChildren().addAll(mergeCollections(pair, sourcePrincipals, targetPrincipals, namer))
 
                         List<SyncAttributePair> attrs = mergeAttributes(localAttrs, remoteAttrs, true)
                         pair.getAttributes().addAll(attrs)
@@ -309,7 +323,7 @@ class InventoryComparer extends BeanComparer {
                     def localDef = slurper.parseText(jobDefinision)
                     localAttrs  = new HashMap<String, Object>(5)
                     localDef.children().each { attribute ->
-                        if (["Steps","Schedules"].contains(attribute.name())) {
+                        if (["Steps","Schedules","date_modified","date_created"].contains(attribute.name())) {
                             return;
                         }
                         localAttrs.put(attribute.name(),attribute.text())
@@ -327,7 +341,7 @@ class InventoryComparer extends BeanComparer {
                     def remoteDef = slurper.parseText(jobDefinision)
                     remoteAttrs  = new HashMap<String, Object>(5)
                     remoteDef.children().each { attribute ->
-                        if (["Steps","Schedules"].contains(attribute.name())) {
+                        if (["Steps","Schedules","date_modified","date_created"].contains(attribute.name())) {
                             return;
                         }
                         remoteAttrs.put(attribute.name(),attribute.text())
@@ -349,10 +363,21 @@ class InventoryComparer extends BeanComparer {
                     }
                 }
             }
-        } else if (objectType.equals("USER")) {
-            NamedObject source = (NamedObject)pair.getSource();
-            NamedObject target = (NamedObject)pair.getTarget();
-            pair.getAttributes().addAll(mergeAttributes(source.getCustomMap(), target.getCustomMap()));
+        } else if (objectType.equals("ServerPrincipal")) {
+            SecurityObject source = (SecurityObject)pair.getSource();
+            NodeChild      target = (NodeChild)pair.getTarget();
+
+            pair.getAttributes().add(new SyncAttributePair(SecurityObject.TYPE, source?.getCustomData(SecurityObject.TYPE), target?.type_desc?.text()))
+            pair.getAttributes().add(new SyncAttributePair("Roles", source?.getCustomData("Roles") ?: "", target?.ServerRoles?.text()))
+            pair.getAttributes().add(new SyncAttributePair(SecurityObject.ENABLED, source?.getCustomData(SecurityObject.ENABLED), target?.enabled?.text()))
+            pair.getAttributes().add(new SyncAttributePair(SecurityObject.ID, source?.getCustomData(SecurityObject.ID), target?.name?.text()))
+
+            // Map<String,String> sourceAttrs = new LinkedHashMap<>();
+            // source?.children().each{p -> if (!p.name().equals("ServerPermissions")) sourceAttrs.put(p.name(), p.text())};
+            
+            // Map<String,String> targetAttrs = new LinkedHashMap<>();
+            // target?.children().each{p -> if (!p.name().equals("ServerPermissions")) targetAttrs.put(p.name(), p.text())};            
+            // pair.getAttributes().addAll(mergeAttributes(sourceAttrs, targetAttrs));
         } else if (objectType.equals("File") || objectType.equals("Step")) {
             
             NodeChild source = (NodeChild)pair.getSource();
@@ -405,51 +430,51 @@ select (
     for xml path('Config'), type
 ) as Configuration,
 (
-    SELECT
-        SERVERPROPERTY('BuildClrVersion') as BuildClrVersion,
-        SERVERPROPERTY('Collation') as Collation,
-        SERVERPROPERTY('CollationID') as CollationID,
-        SERVERPROPERTY('ComparisonStyle') as ComparisonStyle,
-        SERVERPROPERTY('ComputerNamePhysicalNetBIOS') as ComputerNamePhysicalNetBIOS,
-        SERVERPROPERTY('Edition') as Edition,
-        SERVERPROPERTY('EditionID') as EditionID,
-        SERVERPROPERTY('EngineEdition') as EngineEdition,
-        SERVERPROPERTY('HadrManagerStatus') as HadrManagerStatus,
-        SERVERPROPERTY('InstanceDefaultDataPath') as InstanceDefaultDataPath,
-        SERVERPROPERTY('InstanceDefaultLogPath') as InstanceDefaultLogPath,
-        SERVERPROPERTY('InstanceName') as InstanceName,
-        SERVERPROPERTY('IsAdvancedAnalyticsInstalled') as IsAdvancedAnalyticsInstalled,
-        SERVERPROPERTY('IsClustered') as IsClustered,
-        SERVERPROPERTY('IsFullTextInstalled') as IsFullTextInstalled,
-        SERVERPROPERTY('IsHadrEnabled') as IsHadrEnabled,
-        SERVERPROPERTY('IsIntegratedSecurityOnly') as IsIntegratedSecurityOnly,
-        SERVERPROPERTY('IsLocalDB') as IsLocalDB,
-        SERVERPROPERTY('IsPolybaseInstalled') as IsPolybaseInstalled,
-        SERVERPROPERTY('IsSingleUser') as IsSingleUser,
-        SERVERPROPERTY('IsXTPSupported') as IsXTPSupported,
-        SERVERPROPERTY('LCID') as LCID,
-        SERVERPROPERTY('LicenseType') as LicenseType,
-        SERVERPROPERTY('MachineName') as MachineName,
-        SERVERPROPERTY('NumLicenses') as NumLicenses,
---        SERVERPROPERTY('ProcessID') as ProcessID,
-        SERVERPROPERTY('ProductBuild') as ProductBuild,
-        SERVERPROPERTY('ProductBuildType') as ProductBuildType,
-        SERVERPROPERTY('ProductLevel') as ProductLevel,
-        SERVERPROPERTY('ProductMajorVersion') as ProductMajorVersion,
-        SERVERPROPERTY('ProductMinorVersion') as ProductMinorVersion,
-        SERVERPROPERTY('ProductUpdateLevel') as ProductUpdateLevel,
-        SERVERPROPERTY('ProductUpdateReference') as ProductUpdateReference,
-        SERVERPROPERTY('ProductVersion') as ProductVersion,
-        SERVERPROPERTY('ResourceLastUpdateDateTime') as ResourceLastUpdateDateTime,
-        SERVERPROPERTY('ResourceVersion') as ResourceVersion,
-        SERVERPROPERTY('ServerName') as ServerName,
-        SERVERPROPERTY('SqlCharSet') as SqlCharSet,
-        SERVERPROPERTY('SqlCharSetName') as SqlCharSetName,
-        SERVERPROPERTY('SqlSortOrder') as SqlSortOrder,
-        SERVERPROPERTY('SqlSortOrderName') as SqlSortOrderName,
-        SERVERPROPERTY('FilestreamShareName') as FilestreamShareName,
-        SERVERPROPERTY('FilestreamConfiguredLevel') as FilestreamConfiguredLevel,
-        SERVERPROPERTY('FilestreamEffectiveLevel') as FilestreamEffectiveLevel
+    select
+        serverproperty('BuildClrVersion') as BuildClrVersion,
+        serverproperty('Collation') as Collation,
+        serverproperty('CollationID') as CollationID,
+        serverproperty('ComparisonStyle') as ComparisonStyle,
+        serverproperty('ComputerNamePhysicalNetBIOS') as ComputerNamePhysicalNetBIOS,
+        serverproperty('Edition') as Edition,
+        serverproperty('EditionID') as EditionID,
+        serverproperty('EngineEdition') as EngineEdition,
+        serverproperty('HadrManagerStatus') as HadrManagerStatus,
+        serverproperty('InstanceDefaultDataPath') as InstanceDefaultDataPath,
+        serverproperty('InstanceDefaultLogPath') as InstanceDefaultLogPath,
+        serverproperty('InstanceName') as InstanceName,
+        serverproperty('IsAdvancedAnalyticsInstalled') as IsAdvancedAnalyticsInstalled,
+        serverproperty('IsClustered') as IsClustered,
+        serverproperty('IsFullTextInstalled') as IsFullTextInstalled,
+        serverproperty('IsHadrEnabled') as IsHadrEnabled,
+        serverproperty('IsIntegratedSecurityOnly') as IsIntegratedSecurityOnly,
+        serverproperty('IsLocalDB') as IsLocalDB,
+        serverproperty('IsPolybaseInstalled') as IsPolybaseInstalled,
+        serverproperty('IsSingleUser') as IsSingleUser,
+        serverproperty('IsXTPSupported') as IsXTPSupported,
+        serverproperty('LCID') as LCID,
+        serverproperty('LicenseType') as LicenseType,
+        serverproperty('MachineName') as MachineName,
+        serverproperty('NumLicenses') as NumLicenses,
+        -- serverproperTY('ProcessID') as ProcessID,
+        serverproperty('ProductBuild') as ProductBuild,
+        serverproperty('ProductBuildType') as ProductBuildType,
+        serverproperty('ProductLevel') as ProductLevel,
+        serverproperty('ProductMajorVersion') as ProductMajorVersion,
+        serverproperty('ProductMinorVersion') as ProductMinorVersion,
+        serverproperty('ProductUpdateLevel') as ProductUpdateLevel,
+        serverproperty('ProductUpdateReference') as ProductUpdateReference,
+        serverproperty('ProductVersion') as ProductVersion,
+        serverproperty('ResourceLastUpdateDateTime') as ResourceLastUpdateDateTime,
+        serverproperty('ResourceVersion') as ResourceVersion,
+        serverproperty('ServerName') as ServerName,
+        serverproperty('SqlCharSet') as SqlCharSet,
+        serverproperty('SqlCharSetName') as SqlCharSetName,
+        serverproperty('SqlSortOrder') as SqlSortOrder,
+        serverproperty('SqlSortOrderName') as SqlSortOrderName,
+        serverproperty('FilestreamShareName') as FilestreamShareName,
+        serverproperty('FilestreamConfiguredLevel') as FilestreamConfiguredLevel,
+        serverproperty('FilestreamEffectiveLevel') as FilestreamEffectiveLevel
     for xml path('Properties'), type
 )
 as Properties,
@@ -465,10 +490,49 @@ as Properties,
     from 
         sys.dm_os_sys_info
     for xml path('SysInfo'), type
-) as SysInfo
+) as SysInfo,
+(
+    select 
+    -- SecurityObject.Source = 'SqlServer' ( constant )
+    -- SecurityObject.ServerName = 'ConnectionName' from DBMaster
+    -- SecurityObject.DatabaseName = null
+    p.name, -- SecurityObject.Name
+    -- p.sid, -- SecutityObject.Id
+    p.type, -- ignore
+    p.type_desc, -- SecurityObject.Type
+    ~p.is_disabled as enabled, -- SecurityObject.Type
+    p.create_date, 
+    p.modify_date,
+    stuff((
+            select N', '+ rp.name from sys.server_role_members rm
+            inner join sys.server_principals rp on rp.principal_id = rm.role_principal_id
+            where p.principal_id=rm.member_principal_id
+            for xml path(''), type
+    ).value('text()[1]','nvarchar(max)'),1,2,N'') as ServerRoles, 
+    (
+        select 
+            sp.class,
+            sp.class_desc,
+            sp.grantor_principal_id,
+            sp.permission_name,
+            sp.state_desc,
+	    ep.name as EndpointName
+        from 
+            sys.server_permissions sp
+   	    left join sys.endpoints ep on sp.major_id = ep.endpoint_id and sp.class=105
+        where p.principal_id=sp.grantee_principal_id
+        for xml path('ServerPermission'), type
+    ) as ServerPermissions
+    from 
+        sys.server_principals p
+    where 
+        p.name not in ('sysadmin','securityadmin','serveradmin','setupadmin','processadmin','diskadmin','dbcreator','bulkadmin') and p.type<>'C'
+    for xml path ('ServerPrincipal'), type
+) as ServerPrincipals
 for xml path('ServerInfo')
 ) as ServerInfo
 """
+// TODO Add exec msdb.dbo.sp_get_sqlagent_properties
 
 
         def conn = dialect.getConnection()
@@ -545,7 +609,7 @@ class InventorySyncSession extends SyncSession {
                 case ChangeType.NEW:
                 case ChangeType.CHANGED:
                 case ChangeType.EQUALS:
-                    if (pair.isSelected()) {
+                    if (pair.isSelected() && pair.getErrorStatus()==SyncPair.ErrorType.NONE) {
                         target.setCustomData("ServerInfo", source.getCustomData("ServerInfo"))
                         target.setCustomData("Last Sync Date", lastSyncDate);
                         connectionSrv.updateConnection(target)
@@ -659,6 +723,47 @@ class InventorySyncSession extends SyncSession {
                 case ChangeType.EQUALS: 
                     sourceJob.setCustomData("Last Sync Date", lastSyncDate);
                     inventorySrv.saveJob(sourceJob)
+                    break;
+                default:
+                    throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
+            }
+        } else if (objectType.equals("ServerPrincipal")) {
+            SecurityObject  sourceSP = (SecurityObject)pair.getSource();
+            NodeChild       targetSP = (NodeChild)pair.getTarget();
+            switch (pair.getChangeType()) {
+                case ChangeType.NEW:
+                case ChangeType.CHANGED:
+                    String serverName = pair.getParentPair().getSourceName()
+                    def so = sourceSP
+                    if (so == null) {
+                        so = new SecurityObject()
+                        so.setServerName(serverName)
+                        so.setSource("SqlServer")
+		    }
+                    so.setSecurityObjectId(targetSP.name.text())
+                    so.setCustomData(SecurityObject.TYPE,targetSP.type_desc.text())
+                    so.setCustomData(SecurityObject.NAME,targetSP.name.text())
+                    so.setCustomData(SecurityObject.ENABLED,targetSP.enabled.text())
+                    so.setCustomData("Roles",targetSP?.ServerRoles.text())
+
+                    so.setDeleted(false)
+                    so.setCustomData("Definition", groovy.xml.XmlUtil.serialize(targetSP))
+                    so.setCustomData("Last Sync Date", lastSyncDate)
+                    
+                    if (so.isPersisted()) {
+                        inventorySrv.saveSecurityObject(so)
+                    } else {
+                        inventorySrv.createSecurityObject(so)
+                    }
+                    break;
+                case ChangeType.DELETED:
+                    inventorySrv.deleteSecurityObject(sourceSP.getId());
+                    break;                    
+                case ChangeType.COPIED:
+                    throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
+                case ChangeType.EQUALS: 
+                    sourceSP.setCustomData("Last Sync Date", lastSyncDate);
+                    inventorySrv.saveSecurityObject(sourceSP);
                     break;
                 default:
                     throw new RuntimeException("Unexpected change type ${pair.getChangeType()}")
