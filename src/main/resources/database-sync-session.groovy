@@ -126,8 +126,12 @@ class InventoryComparer extends BeanComparer {
         String objectType = pair.getObjectType()
         Namer namer = session.getNamer()
         if (objectType.equals("Inventory")) {
-            def connections = session.connections.collectEntries{[it.name, it]}
-
+            boolean selectedOnly = session.connections != null;
+            Map<String,DatabaseConnection> connections = (selectedOnly
+                    ?session.connections
+                    :session.connectionSrv.getConnectionList())
+                            .collectEntries{[it.name, it]};
+                            
             connections.entrySet().removeAll { it.getValue().getDriver() == "ldap" }
 
             inventoryDBs = session.inventorySrv
@@ -143,16 +147,18 @@ class InventoryComparer extends BeanComparer {
                             .groupBy { it.getServerName() }
            
             def invConnections = []
-            def invConnectionNames = []
+            def invConnectionNames = [] as Set;
             invConnectionNames.addAll(inventoryDBs.keySet())
             invConnectionNames.addAll(connections.keySet())
-            invConnectionNames.unique().each { serverName->
-                def conn = null; // connections[serverName]
-                if (conn==null) {  
-                    conn = new DatabaseConnection()
-                    conn.setName(serverName)
+            invConnectionNames.each { serverName->
+                if (!selectedOnly || connections.containsKey(serverName)) {
+                    def conn = null; // connections[serverName]
+                    if (conn==null) {
+                        conn = new DatabaseConnection()
+                        conn.setName(serverName)
+                    }
+                    invConnections.add(conn)
                 }
-                invConnections.add(conn)                 
             }
             
             connectionResults = connections.values().collectEntries{[it.name,
