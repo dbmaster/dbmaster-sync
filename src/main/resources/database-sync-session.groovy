@@ -126,7 +126,7 @@ class InventoryComparer extends BeanComparer {
         String objectType = pair.getObjectType()
         Namer namer = session.getNamer()
         if (objectType.equals("Inventory")) {
-            def connections = session.connectionSrv.getConnectionList().collectEntries{[it.name, it]}
+            def connections = session.connections.collectEntries{[it.name, it]}
 
             connections.entrySet().removeAll { it.getValue().getDriver() == "ldap" }
 
@@ -560,14 +560,16 @@ class InventorySyncSession extends SyncSession {
     DbMaster dbm
     InventoryService inventorySrv
     ConnectionService connectionSrv
+    Collection<DatabaseConnection> connections;
     Map<String, Database> connectionDbMap;
     
-    public InventorySyncSession(DbMaster dbm, Logger logger) {
+    public InventorySyncSession(DbMaster dbm, Logger logger, Collection<DatabaseConnection> connections) {
         super(new InventoryComparer(logger));
         setNamer(new InventoryNamer());
         this.dbm = dbm
         inventorySrv = dbm.getService(InventoryService.class)
         connectionSrv = dbm.getService(ConnectionService.class)
+        this.connections = connections;
     }
 
     public void applyChanges() {
@@ -774,7 +776,7 @@ class InventorySyncSession extends SyncSession {
     }    
 }
 
-sync_session = new InventorySyncSession(dbm, logger)
+sync_session = new InventorySyncSession(dbm, logger, connections)
 
 def inventory = new RootObject("Inventory", "Inventory")
 sync_session.syncObjects(inventory, inventory)
