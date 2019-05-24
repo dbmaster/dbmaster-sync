@@ -443,6 +443,7 @@ class ModelSyncSession extends SyncSession {
             syncService.saveSession(this, "Model Import")
             
             modelService.saveModel(sourceModel, null)
+            modelService.createExtendedPropertiesConfigs(sourceModel);
         } finally {
             dbm.closeResources()
         }
