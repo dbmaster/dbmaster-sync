@@ -5,6 +5,7 @@ import java.util.Collections
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
 import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType;
+import static org.apache.commons.lang.StringEscapeUtils.escapeHtml;
 
 public class PreviewGenerator implements SummaryGenerator {
     // todo should be copied
@@ -269,16 +270,55 @@ public class PreviewGenerator implements SummaryGenerator {
             
             if (change != AttributeChangeType.EQUALS) {
                 sb.append("<li>")
-                switch (attribute.getChangeType()) {
-                    case AttributeChangeType.NEW:
-                        sb.append(name+" set to "+t);
-                        break
-                    case AttributeChangeType.CHANGED:
-                        sb.append(name+" changed from "+s+" to "+t);
-                        break
-                    case AttributeChangeType.DELETED: 
-                        sb.append(name+" - value "+ s +" is removed");                    
-                        break
+                if (name == "command" && pair.objectType == "Step") {
+                   
+                     switch (attribute.getChangeType()) {
+                        case AttributeChangeType.NEW:
+                            sb.append(name+" added");
+                            break
+                        case AttributeChangeType.DELETED:
+                            sb.append(name+" - value is removed");
+                            break
+                        case AttributeChangeType.CHANGED:
+                            sb.append(name+" changed");
+                            break
+                    }
+                    
+                    if (change == SyncAttributePair.AttributeChangeType.CHANGED) {
+                        String id = pair.getId()+"cmd";
+                        
+                        sb.append("&nbsp;<span><a href=\"#\" data-type=\"popup-cmp\" data-title=\"");
+                        sb.append(pair.getObjectType());
+                        sb.append(' ');
+                        sb.append(name);
+                        sb.append("\" id=\"");
+                        sb.append(id);
+                        sb.append("\">(view changes)</a></span>");
+                        
+                        sb.append("<div style=\"display:none\" id=\"");
+                        sb.append(id);
+                        sb.append("s\">");
+                        sb.append(s==null ? "-not defined-" : escapeHtml(s));
+                        sb.append("</div>");
+                        
+                        sb.append("<div style=\"display:none\" id=\"");
+                        sb.append(id);
+                        sb.append("t\">");
+                        sb.append(t==null ? "-not defined-" : escapeHtml(t));
+                        sb.append("</div>");
+                    }
+                } else {
+                    switch (attribute.getChangeType()) {
+                        case AttributeChangeType.NEW:
+                            sb.append(name+" set to "+t);
+                            break
+                        case AttributeChangeType.CHANGED:
+                            sb.append(name+" changed from "+s+" to "+t);
+                            break
+                        case AttributeChangeType.DELETED: 
+                            sb.append(name+" - value "+ s +" is removed");                    
+                            break
+                    }
                 }
                 sb.append("</li>")
             }
