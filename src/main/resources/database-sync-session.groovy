@@ -106,9 +106,9 @@ class ConnectionResult {
 }
 
 class InventoryComparer extends BeanComparer {
-    def inventoryDBs
-    def inventoryJobs
-    def inventoryServerPrincipals
+    Map<String,Database> inventoryDBs
+    Map<String,Job> inventoryJobs
+    Map<String,SecurityObject> inventoryServerPrincipals
     Logger logger
     
     Map<String,Future<Object>> connectionResults;
@@ -127,19 +127,39 @@ class InventoryComparer extends BeanComparer {
         Namer namer = session.getNamer()
         if (objectType.equals("Inventory")) {
             boolean selectedOnly = session.connections != null;
+            Set<String> disabledConnections = [] as Set;
             Map<String,DatabaseConnection> connections = (selectedOnly
                     ?session.connections
-                    :session.connectionSrv.getConnectionList())
+                    :session.connectionSrv.getConnectionSlice(new QueryRequest()))
+                            .findAll{ 
+                                if (it.disabled) {
+                                    disabledConnections << it.name;
+                                    return false;
+                                }
+                                return true;
+                            }
                             .collectEntries{[it.name, it]};
                             
             connections.entrySet().removeAll { it.getValue().getDriver() == "ldap" }
 
             inventoryDBs = session.inventorySrv
                             .getDatabaseList(new QueryRequest("Deleted=no"))
+                            .findAll{ 
+                                if (disabledConnections.contains(it.connectionName)) {
+                                    return false;
+                                }
+                                return true;
+                            }
                             .groupBy { it.getServerName() } 
 
             inventoryJobs = session.inventorySrv
                             .getJobList(new QueryRequest("Deleted=no"))
+                            .findAll{
+                                if (disabledConnections.contains(it.serverName)) {
+                                    return false;
+                                }
+                                return true;
+                            }
                             .groupBy { it.getServerName() }
            
             inventoryServerPrincipals = session.inventorySrv
