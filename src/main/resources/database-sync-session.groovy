@@ -617,6 +617,7 @@ class InventorySyncSession extends SyncSession {
                 importChanges(it)
             }
         } else if (objectType.equals("Server")) {
+            // System.out.println("Change Type=" + pair.getChangeType()+" selected="+pair.isSelected()+" ErrorStatus="+pair.getErrorStatus().errorStatus);
             DatabaseConnection source = (DatabaseConnection)pair.getSource();
             DatabaseConnection target = (DatabaseConnection)pair.getTarget();
             switch (pair.getChangeType()) {
@@ -625,9 +626,9 @@ class InventorySyncSession extends SyncSession {
                 case ChangeType.NEW:
                 case ChangeType.CHANGED:
                 case ChangeType.EQUALS:
-                    if (pair.isSelected() && pair.getErrorStatus()==SyncPair.ErrorType.NONE) {
+                    if (pair.isSelected() && pair.getErrorStatus().errorStatus==SyncPair.ErrorType.NONE) {
                         target.setCustomData("ServerInfo", source.getCustomData("ServerInfo"))
-                        target.setCustomData("Last Sync Date", lastSyncDate);
+                        target.setCustomData("Last Sync Date", lastSyncDate)
                         connectionSrv.updateConnection(target)
                     }
                     break;

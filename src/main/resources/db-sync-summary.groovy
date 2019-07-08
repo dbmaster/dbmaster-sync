@@ -79,13 +79,14 @@ public class PreviewGenerator implements SummaryGenerator {
             } else {
                 sb.append("<table class=\"simple-table\" cellspacing=\"0\" cellpadding=\"10\"><tr style=\"background-color:#EEE\"><td>Server</td><td>Change details</td></tr>")
 		def servers = pair.getChildren().sort { it.sourceName }
-                for (SyncPair server : servers) {
-                    def errorStatus = server.getErrorStatus()
-                    if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE || server.getChangeType()!=ChangeType.EQUALS) {
+                for (SyncPair serverPair : servers) {
+                    def errorStatus = serverPair.getErrorStatus()
+                    if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE || serverPair.getChangeType()!=ChangeType.EQUALS) {
                         sb.append("<tr valign=\"bottom\"><td style=\"margin:3px; vertical-align:top; white-space: nowrap\">")
-                          .append(server.sourceName)
+                          .append(serverPair.sourceName).append("<br/>")
+                          .append("Last Sync: "+serverPair.target.getCustomData("Last Sync Date"))
                           .append("</td><td style=\"margin:3px;vertical-align:top\">")
-                        printSyncPair(server)
+                        printSyncPair(serverPair)
                         sb.append("</td></tr>")
                     }
                 }
