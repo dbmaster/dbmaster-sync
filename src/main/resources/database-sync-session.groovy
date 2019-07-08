@@ -593,19 +593,17 @@ class InventorySyncSession extends SyncSession {
             connectionDbMap = [:]
             QueryRequest q;
             // TODO: fix delimeter char %
-            q = new QueryRequest();
-            q.getCriteria().add(new CustomCriterion("\"Deleted\"", Operator.EQ, "no"));
+            q = new QueryRequest("Deleted=no");
             inventorySrv.getDatabaseList(q).each{ db ->
                 connectionDbMap.put( db.getConnectionName()+"%"+db.getDatabaseName(), db);
             }
-            q = new QueryRequest();
-            q.getCriteria().add(new CustomCriterion("\"Deleted\"", Operator.EQ, "yes"));
+            q = new QueryRequest("Deleted=yes");
             inventorySrv.getDatabaseList(q).each{ db ->
                 connectionDbMap.put( db.getConnectionName()+"%"+db.getDatabaseName(), db);
             }
             
             importChanges(getSyncResult());
-            SyncService syncService = dbm.getService    (SyncService.class);
+            SyncService syncService = dbm.getService(SyncService.class);
             syncService.saveSession(this, "Database Import");
         } finally {
             dbm.closeResources()
