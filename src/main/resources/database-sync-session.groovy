@@ -40,8 +40,6 @@ import com.branegy.scripting.DbMaster
 import com.branegy.service.core.QueryRequest
 import com.branegy.dbmaster.sync.api.SyncSession.SearchTarget
 import com.branegy.dbmaster.sync.api.SyncService
-import com.branegy.service.core.search.CustomCriterion
-import com.branegy.service.core.search.CustomCriterion.Operator
 
 import groovy.util.slurpersupport.NodeChild
 
