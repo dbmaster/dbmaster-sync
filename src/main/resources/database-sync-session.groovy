@@ -699,13 +699,9 @@ class InventorySyncSession extends SyncSession {
             switch (pair.getChangeType()) {
                 case ChangeType.NEW:
                     String serverName = pair.getParentPair().getSourceName()
-                    //def db = connectionDbMap.get(serverName+"%"+targetDB.getName());
-                    //if (db == null) {
-                    //    db = new Database()
-                    //    db.setDatabaseName(targetDB.getName())
                     targetJob.setServerName(serverName)
                     targetJob.setCustomData(Database.DELETED, false);
-                    targetJob.setCustomData("Last Sync Date", lastSyncDate);
+                    targetJob.setLastSyncDate(lastSyncDate);
                     //}
                     // TODO(Restore operation)db.setCustomData(Database.DELETED, false);
                     //for (SyncAttributePair attr : pair.getAttributes()) {
@@ -716,7 +712,7 @@ class InventorySyncSession extends SyncSession {
                     //if (sourceJob.isPersisted()) {
                     //    inventorySrv.updateJob(sourceJob)
                     //} else {
-                        inventorySrv.createJob(targetJob)
+                    inventorySrv.createJob(targetJob)
                     //}
                     break;
                 case ChangeType.CHANGED:
@@ -726,7 +722,7 @@ class InventorySyncSession extends SyncSession {
                         }
                     }
                     sourceJob.setCustomData("JobDefinition",  targetJob.getCustomData("JobDefinition"))
-                    sourceJob.setCustomData("Last Sync Date", lastSyncDate);
+                    sourceJob.setLastSyncDate(lastSyncDate);
                     sourceJob.setCustomData(Database.DELETED, false)
                     inventorySrv.saveJob(sourceJob)
                     break;
@@ -736,7 +732,7 @@ class InventorySyncSession extends SyncSession {
                 case ChangeType.COPIED:
                     throw new RuntimeException("Not implemented change type ${pair.getChangeType()}")
                 case ChangeType.EQUALS: 
-                    sourceJob.setCustomData("Last Sync Date", lastSyncDate);
+                    sourceJob.setLastSyncDate(lastSyncDate);
                     inventorySrv.saveJob(sourceJob)
                     break;
                 default:
