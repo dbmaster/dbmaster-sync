@@ -141,12 +141,12 @@ class InventoryComparer extends BeanComparer {
             connections.entrySet().removeAll { it.getValue().getDriver() == "ldap" }
 
             inventoryDBs = session.inventorySrv
-                            .getDatabaseList(new QueryRequest("Deleted=no"))
+                            .getDatabaseList(new QueryRequest("'Deleted'='no'"))
                             .findAll{!disabledConnections.contains(it.connectionName)}
                             .groupBy { it.getServerName() } 
 
             inventoryJobs = session.inventorySrv
-                            .getJobList(new QueryRequest("Deleted=no"))
+                            .getJobList(new QueryRequest("'Deleted'='no'"))
                             .findAll{!disabledConnections.contains(it.serverName)}
                             .groupBy { it.getServerName() }
            
