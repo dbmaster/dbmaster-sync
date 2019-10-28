@@ -5,7 +5,9 @@ import java.util.Collections
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.api.SyncPair.ChangeType
 import com.branegy.dbmaster.sync.api.SyncAttributePair.AttributeChangeType;
+import com.branegy.util.DateTimeUtils;
 import static org.apache.commons.lang.StringEscapeUtils.escapeHtml;
+
 
 public class PreviewGenerator implements SummaryGenerator {
     // todo should be copied
@@ -82,9 +84,10 @@ public class PreviewGenerator implements SummaryGenerator {
                 for (SyncPair serverPair : servers) {
                     def errorStatus = serverPair.getErrorStatus()
                     if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE || serverPair.getChangeType()!=ChangeType.EQUALS) {
+                        def lastSyncDate = serverPair.target.getCustomData("Last Sync Date");
                         sb.append("<tr valign=\"bottom\"><td style=\"margin:3px; vertical-align:top; white-space: nowrap\">")
                           .append(serverPair.sourceName).append("<br/>")
-                          .append("Last Sync: "+serverPair.target.getCustomData("Last Sync Date"))
+                          .append("Last Sync: "+(lastSyncDate == null ? "Initial sync" : DateTimeUtils.dateTimeShort(lastSyncDate)))
                           .append("</td><td style=\"margin:3px;vertical-align:top\">")
                         printSyncPair(serverPair)
                         sb.append("</td></tr>")
