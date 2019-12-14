@@ -37,18 +37,19 @@ class ModelNamer implements Namer {
 
     @Override
     public String getType(Object o) {
-        if (o instanceof Model)               {  return "Model"
-        } else if (o instanceof Table)        {  return "Table"
-        } else if (o instanceof View)         {  return "View"
-        } else if (o instanceof Procedure)    {  return "Procedure"
-        } else if (o instanceof Function)     {  return "Function"
-        } else if (o instanceof Parameter)    {  return "Parameter"
-        } else if (o instanceof Column)       {  return "Column"
-        } else if (o instanceof Index)        {  return "Index"
-        } else if (o instanceof Constraint)   {  return "Constraint"
-        } else if (o instanceof ForeignKey)   {  return "ForeignKey"
-        } else if (o instanceof Trigger)      {  return "Trigger"
-        } else if (o instanceof ColumnMapping){  return "ColumnMapping"
+        if (o instanceof Model)                 {  return "Model"
+        } else if (o instanceof ModelDataSource){  return "DataSource"
+        } else if (o instanceof Table)          {  return "Table"
+        } else if (o instanceof View)           {  return "View"
+        } else if (o instanceof Procedure)      {  return "Procedure"
+        } else if (o instanceof Function)       {  return "Function"
+        } else if (o instanceof Parameter)      {  return "Parameter"
+        } else if (o instanceof Column)         {  return "Column"
+        } else if (o instanceof Index)          {  return "Index"
+        } else if (o instanceof Constraint)     {  return "Constraint"
+        } else if (o instanceof ForeignKey)     {  return "ForeignKey"
+        } else if (o instanceof Trigger)        {  return "Trigger"
+        } else if (o instanceof ColumnMapping)  {  return "ColumnMapping"
         } else {
             throw new IllegalArgumentException("Unexpected object class "+o);
         }
@@ -56,8 +57,8 @@ class ModelNamer implements Namer {
 }
 
 class ModelComparer extends BeanComparer {
-    Model    source
-    Model    target
+    ModelDataSource    source
+    ModelDataSource    target
     final SyncAttributeComparator<?> sourceComparator;
     final boolean ignoreColumnOrderChanges;
     final boolean ignoreRenamedCKs;
@@ -83,9 +84,9 @@ class ModelComparer extends BeanComparer {
         String objectType = pair.getObjectType();
         Namer namer = session.getNamer();
         String exludeObjects = session.getParameter("exclude_objects");
-        if (objectType.equals("Model")) {
-            Model sourceModel = (Model)pair.getSource();
-            Model targetModel = (Model)pair.getTarget();
+        if (objectType.equals("DataSource")) {
+            ModelDataSource sourceModel = (ModelDataSource)pair.getSource();
+            ModelDataSource targetModel = (ModelDataSource)pair.getTarget();
             pair.getChildren().addAll(mergeCollections(pair, sourceModel.getTables(), targetModel.getTables(), namer));
             pair.getChildren().addAll(mergeCollections(pair, sourceModel.getViews(),   targetModel.getViews(), namer));
             pair.getChildren().addAll(mergeCollections(pair, sourceModel.getProcedures(), targetModel.getProcedures(), namer));
@@ -420,7 +421,7 @@ targetParameter?.getDefaultValue()))
 
 class ModelSyncSession extends SyncSession {
     DbMaster dbm
-    Model sourceModel
+    ModelDataSource sourceModel
     // modelService used in applyChanges
     ModelService modelService
 
@@ -442,7 +443,7 @@ class ModelSyncSession extends SyncSession {
             SyncService syncService = dbm.getService(SyncService.class)
             syncService.saveSession(this, "Model Import")
             
-            modelService.saveModel(sourceModel, null)
+            modelService.saveModelDataSource(sourceModel, null)
             modelService.createExtendedPropertiesConfigs(sourceModel);
         } finally {
             dbm.closeResources()
@@ -466,7 +467,7 @@ class ModelSyncSession extends SyncSession {
             }
         }
         
-        if (objectType ==~ /Model/) {
+        if (objectType ==~ /DataSource/) {
             pair.getChildren().each { importChanges(it, sourceModel) }
         } else if (objectType.equals("Table")) {
             Table   sourceTable = (Table)pair.getSource();
@@ -744,7 +745,7 @@ sync_session.setParameter("customFieldMap", binding.variables.get("customFieldMa
     ? Collections.emptyMap()
     : binding.variables.get("customFieldMap"))
 
-if (source instanceof Model) {
+if (source instanceof ModelDataSource) {
     sync_session.sourceModel = source
 }
 
