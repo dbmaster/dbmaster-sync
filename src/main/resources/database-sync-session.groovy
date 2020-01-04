@@ -1,5 +1,7 @@
 import com.branegy.dbmaster.sync.api.*
 import com.branegy.dbmaster.sync.impl.*
+import com.branegy.dbmaster.sync.impl.BeanComparer.KeySupplier
+
 import java.util.ArrayList
 import java.util.Iterator
 import java.util.List
@@ -35,6 +37,8 @@ import com.branegy.service.connection.model.DatabaseConnection
 import com.branegy.service.core.AbstractService
 import com.branegy.service.core.CheckedAccess
 import com.branegy.service.core.exception.EntityNotFoundApiException
+import com.branegy.service.core.exception.IllegalArgumentApiException
+
 import com.google.inject.persist.Transactional
 import com.branegy.scripting.DbMaster
 import com.branegy.service.core.QueryRequest
@@ -117,6 +121,104 @@ class InventoryComparer extends BeanComparer {
     public InventoryComparer(Logger logger) {
         this.logger = logger
     }
+    
+    private static Map<String,Map<String,Job>> groupJob(boolean caseSensitive, Collection<Job> collection){
+        Map<String,Map<String,Job>> result = [:] as LinkedHashMap;
+        for (Job job : collection) {
+            String name = job.getJobName();
+            if (Boolean.TRUE.equals(job.getCustomData("GuidSuffix"))) {
+                name = name.substring(0, name.lastIndexOf('#'));
+            }
+            if (!caseSensitive) {
+                name = name.toLowerCase();
+            }
+            
+            Map<String,Job> map = result.get(name);
+            if (map == null) {
+                map = [:] as LinkedHashMap;
+                result.put(name, map);
+            }
+            if (map.put(job.getCustomData("JobId"), job)!=null) {
+                throw new IllegalArgumentException(job.getCustomData("JobId"));
+            }
+        }
+        return result;
+    }
+    
+    private static void addJobSuffix(Job job) {
+        if (!Boolean.TRUE.equals(job.getCustomData("GuidSuffix"))) {
+            job.setCustomData("GuidSuffix",true);
+            job.setJobName(job.getJobName()+"#"+job.getCustomData("JobId"));
+        }
+    }
+    
+    private static void removeJobSuffix(Job job) {
+        if (Boolean.TRUE.equals(job.getCustomData("GuidSuffix"))) {
+            job.setCustomData("GuidSuffix",false);
+            String name = job.getJobName();
+            job.setJobName(name.substring(0, name.lastIndexOf('#')));
+        }
+    }
+    
+    protected static List<SyncPair> mergeJobs(SyncPair parentPair, Collection<Job> sourceC, Collection<Job> targetC) {
+        List<SyncPair> mergedList;
+        if (sourceC == null && targetC == null) {
+            mergedList = new ArrayList<SyncPair>(0);
+        } else if (targetC == null) {
+            mergedList = new ArrayList<SyncPair>(sourceC.size());
+            for (Object sourceO : sourceC) {
+                mergedList.add(new SyncPair(parentPair, sourceO, null));
+            }
+        } else if (sourceC == null) {
+            mergedList = new ArrayList<SyncPair>(targetC.size());
+            for (Object targetO : targetC) {
+                mergedList.add(new SyncPair(parentPair, null, targetO));
+            }
+        } else {
+            Map<String, Map<String,Job>> targetMap = groupJob(parentPair.isCaseSensitive(),targetC);
+            Map<String, Map<String,Job>> sourceMap = groupJob(parentPair.isCaseSensitive(),sourceC);
+            Map<String,Job> EMPTY = [:];
+            
+            mergedList = new ArrayList<SyncPair>(Math.max(sourceC.size(), targetC.size()));
+            for (Entry<String,Map<String,Job>> e : targetMap.entrySet()) {
+                String name = e.getKey();
+                Map<String,Job> targetJobs = e.getValue();
+                Map<String,Job> sourceJobs = sourceMap.remove(name); 
+                if (sourceJobs == null) {
+                    sourceJobs = EMPTY;
+                }
+                
+                // rename
+                if (targetJobs.size() == 1) {
+                    removeJobSuffix(targetJobs.values().iterator().next());
+                } else {
+                    for (Job job:targetJobs.values()) {
+                        addJobSuffix(job);
+                    }
+                }
+                
+                // merge
+                for (Entry<String,Job> guidTarget:targetJobs.entrySet()) {
+                    String guid = guidTarget.getKey();
+                    Job targetJob = guidTarget.getValue();
+                    Job sourceJob = sourceJobs.remove(guid);
+                    mergedList.add(new SyncPair(parentPair, sourceJob, targetJob));
+                }
+                for (Job sourceJob:sourceJobs.values()) {
+                    mergedList.add(new SyncPair(parentPair, sourceJob, null));
+                }
+            }
+            for (Map<String,Job> e:sourceMap.values()) {
+                for (Job job:e.values()) {
+                    mergedList.add(new SyncPair(parentPair, job, null));
+                }
+            }
+        }
+        return mergedList;
+    }
+    
+    
+    
     
     @Override
     public void syncPair(SyncPair pair, SyncSession session) {
@@ -271,7 +373,7 @@ class InventoryComparer extends BeanComparer {
                             }
                         }
                             childPairs.addAll(mergeCollections(pair, sourceDatabases, targetDatabases, namer))
-                            childPairs.addAll(mergeCollections(pair, sourceJobs, targetJobs, namer))
+                            childPairs.addAll(mergeJobs(pair, sourceJobs, targetJobs))
                         }
                     } catch (ExecutionException e) {
                         // assumption: this exception is related to connectivity
