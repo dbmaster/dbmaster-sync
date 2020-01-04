@@ -441,9 +441,9 @@ class ModelSyncSession extends SyncSession {
             getAllParameters().remove("customFieldMap");
             
             SyncService syncService = dbm.getService(SyncService.class)
-            syncService.saveSession(this, "Model Import")
-            
+            long syncSessionId = syncService.saveSession(this, "Model Import")
             modelService.saveModelDataSource(sourceModel, null)
+            modelService.bindSyncSessionToDataSource(sourceModel, syncSessionId);
             modelService.createExtendedPropertiesConfigs(sourceModel);
         } finally {
             dbm.closeResources()
