@@ -1,8 +1,12 @@
 import java.util.Comparator
+
+
+
 import java.util.Arrays
 import java.util.Collections
 
 import static org.apache.commons.lang.StringEscapeUtils.escapeHtml
+import static org.apache.commons.lang.StringUtils.trimToEmpty;
 
 import com.branegy.dbmaster.model.ForeignKey;
 import com.branegy.dbmaster.model.ForeignKey.ColumnMapping;
@@ -115,7 +119,7 @@ public class PreviewGenerator  implements SummaryGenerator {
             }
         } else { // object level
             
-            sb.append("""<h2 id="pair${pair.id}">${pair.objectType} ${pair.pairName} (${getHtmlChangeType(pair).toLowerCase()})</h2>""");
+            sb.append("""<h2 id="pair${pair.id}" data-s="${trimToEmpty(pair.sourceName)}" data-t="${trimToEmpty(pair.targetName)}">${pair.objectType} ${pair.pairName} (${getHtmlChangeType(pair).toLowerCase()})</h2>""");
 
             def attributes = pair.getAttributes()
                .findAll { (!it.attributeName.equals("Source")) && (!showChangesOnly || it.changeType!=SyncAttributePair.AttributeChangeType.EQUALS) }
