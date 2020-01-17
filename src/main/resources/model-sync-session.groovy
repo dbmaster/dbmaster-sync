@@ -710,7 +710,7 @@ class ModelSyncSession extends SyncSession {
                     case ChangeType.COPIED:
                     case ChangeType.CHANGED:
                         sourceFK.setName(targetFK.getName());
-                        sourceFK.setDisabled(targetFK.getDisabled());
+                        sourceFK.setDisabled(targetFK.isDisabled());
 
                         sourceFK.setDeleteAction(targetFK.getDeleteAction());
                         sourceFK.setUpdateAction(targetFK.getUpdateAction());
