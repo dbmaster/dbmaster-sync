@@ -24,4 +24,12 @@
         </parameters>
         <output  script="db-sync-mailer.groovy" type="html" />
     </tool>
+    
+    <tool id="model-sync" title="Model Sync" projectTypes="modeling">
+        <description>Model Sync</description>
+        <parameters>
+            <parameter name="p_email" title="Email" type="string" required="true" width="400"  />
+        </parameters>
+        <output  script="model-sync.groovy" type="html" />
+    </tool>
 </tools>
