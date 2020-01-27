@@ -32,6 +32,7 @@ for (Model model:models) {
         String html = modelService.generateSyncSessionPreviewHtml(syncSession, true);
         logger.debug("done")
         if (syncSession.getSyncResult().getChangeType() != ChangeType.EQUALS) {
+            syncSession.applyChanges();
             attachments.put(model.getName()+"."+ds.getName(), html);
             logger.info("Changes are found")
         }
