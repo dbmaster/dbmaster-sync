@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
+import java.util.Date
 import java.sql.*
 import org.slf4j.Logger
 
@@ -124,6 +125,7 @@ class InventoryComparer extends BeanComparer {
         String objectType = pair.getObjectType()
         Namer namer = session.getNamer()
         if (objectType.equals("Inventory")) {
+            pair.setSyncDate(new Date());
             boolean selectedOnly = session.connections != null;
             Set<String> disabledConnections = [] as Set;
             Map<String,DatabaseConnection> connections = (selectedOnly

@@ -80,11 +80,14 @@ public class PreviewGenerator implements SummaryGenerator {
                 // TODO Handle errors
             } else {
                 sb.append("<table class=\"simple-table\" cellspacing=\"0\" cellpadding=\"10\"><tr style=\"background-color:#EEE\"><td>Server</td><td>Change details</td></tr>")
-		def servers = pair.getChildren().sort { it.sourceName }
+		        def servers = pair.getChildren().sort { it.sourceName }
                 for (SyncPair serverPair : servers) {
                     def errorStatus = serverPair.getErrorStatus()
                     if (errorStatus.errorStatus!=SyncPair.ErrorType.NONE || serverPair.getChangeType()!=ChangeType.EQUALS) {
-                        def lastSyncDate = serverPair.target.getCustomData("Last Sync Date");
+                        def lastSyncDate = serverPair.target?.getCustomData("Last Sync Date");
+                        if (lastSyncDate == null) {
+                            lastSyncDate = pair.getSyncDate();
+                        }
                         sb.append("<tr valign=\"bottom\"><td style=\"margin:3px; vertical-align:top; white-space: nowrap\">")
                           .append(serverPair.sourceName).append("<br/>")
                           .append("Last Sync: "+(lastSyncDate == null ? "Initial sync" : DateTimeUtils.dateTimeShort(lastSyncDate)))
